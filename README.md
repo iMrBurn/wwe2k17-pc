@@ -22,6 +22,7 @@ Needs Windows 10/11 x64, Visual Studio 2022 (C++ workload), LLVM/Clang 20+, CMak
    ```powershell
    tools\build.ps1
    ```
+
 DLC: copy your own WWE 2K17 DLC packages into `userdata\dlc_inbox\`; the game installs them at the next start.
 
 3. Run in a window (log in `logs\`):
