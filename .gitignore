@@ -27,3 +27,4 @@ launcher/bin/
 launcher/obj/
 launcher/dist/
 *.exe
+launcher_art/

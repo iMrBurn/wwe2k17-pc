@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>WWE2K17Launcher</AssemblyName>
+    <RootNamespace>Launcher</RootNamespace>
+    <Version>0.1.0</Version>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <!-- Icon built from the game's own art: kept out of Git (launcher_art/ is ignored), used when present. -->
+  <PropertyGroup Condition="Exists('..\launcher_art\launcher.ico')">
+    <ApplicationIcon>..\launcher_art\launcher.ico</ApplicationIcon>
+  </PropertyGroup>
+</Project>
