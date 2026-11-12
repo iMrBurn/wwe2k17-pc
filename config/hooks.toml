@@ -5,3 +5,9 @@
 name = "Wwe2k17RangedPhysicalAllocHook"
 address = 0x82241770
 registers = ["r6", "r7"]
+
+# src/content_hooks.cpp: clean the 42-byte content file name (stale bytes crash the SDK's UTF-8 paths).
+[[midasm_hook]]
+name = "Wwe2k17ContentNameHook"
+address = 0x82B6084C
+registers = ["r4", "r5"]

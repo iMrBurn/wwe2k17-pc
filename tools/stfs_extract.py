@@ -93,4 +93,5 @@ def main():
             o.write(s.read_blocks(e["start"], e["blocks"], e["size"]))
         print(f"  -> extracted {e['name']}")
 
-main()
+if __name__ == "__main__":
+    main()

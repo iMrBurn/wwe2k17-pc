@@ -16,7 +16,7 @@ on the stock ReXGlue v0.10.1 release.
 - [x] First build of `wwe2k17.exe`.
 - [x] Boot to the menus.
 - [x] setjmp / longjmp addresses.
-- [ ] TU2 `pac/` overlay and DLC mounting.
+- [x] TU2 `pac/` (update:) and DLC (dlc_inbox, all 6 open).
 - [ ] Port from 2K15 / 2K16: launcher, crash reports, framerate hook, keyboard, native renderer.
 
 ## 2026-11-12
@@ -52,3 +52,26 @@ The game reaches its menus (One on One match type list). What it took, in order:
   (log shows Direct3D 12 on the Intel UHD): to check.
 - `NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented` is expected; 2K15 found that
   answering "not compressed" hangs the first menu load. Leave it.
+
+### Graphics, memory, DLC, first match on screen (2026-11-12 evening)
+
+- GPU: the prebuilt `rexgpu-xenos.dll` of v0.10.1 has the D3D12 backend only (no Vulkan cvars at all), so
+  `gpu_backend = "vulkan"` cannot work; D3D12 it is. The run used the Intel UHD because the laptop was on
+  battery (its RTX disappears from Windows then): keep it plugged in for tests.
+- The ~458 "BaseHeap::Alloc failed to find contiguous range" lines all come in the same 0.1 s at boot, on one
+  thread, never again: the engine probing for its largest free block. Harmless, left alone.
+- FATAL 0x82371598 after ~1.5 min: a virtual-call thunk (lwz r12,0(r3) / lwz r11,N(r12) / mtctr / bctr)
+  reached only through a computed address. `tools/scan_thunks.py` (from 2K16, import stub start passed as
+  argument 4: 0x8334CD0C) adds 95 of them in `config/functions_thunks.toml`. Run it on a generation made
+  without that file.
+- DLC: copy the packages into `userdata\dlc_inbox\`; `Wwe2k17App::InstallDlcInbox` installs each one with the
+  SDK's own `ContentManager::InstallContent` and deletes the copy. The game lists all 6 and opens them as
+  `dlc0`..`dlc5`.
+- FATAL "Dispatch thread: deferred completion threw 'Invalid UTF-8'" ~30 s after boot, only with DLC: the
+  title calls XamContentCreateEx("dlc0" on its stack, &content_data, ..., overlapped); the SDK runs the call
+  100 ms later and only then reads the root name, by which time the stack buffer is garbage. Midasm hook at
+  0x82B6084C (`src/content_hooks.cpp`) copies root name + XCONTENT_DATA into a ring of guest heap slots and
+  points r4/r5 at them. The content data itself was fine (logged hex).
+- Result: 2+ minutes without a crash, the attract-mode demo match renders correctly (Kevin Owens vs Sami Zayn,
+  referee, crowd), title screen shows version 1.02, then the save warning screen. A played match from the
+  menus is still to test (stopped: WWE '12 was open at the same time and the key script sends global keys).

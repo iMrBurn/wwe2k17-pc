@@ -48,8 +48,31 @@ class Wwe2k17App : public rex::ReXApp {
     fs->RegisterSymbolicLink("cache0:", "\\CACHE");
     fs->RegisterSymbolicLink("cache1:", "\\CACHE");
     REXLOG_INFO("Xbox cache mounted at {}", cache_root.string());
+    InstallDlcInbox();
   }
 
  private:
+  // DLC: copy your own packages (STFS, content type 00000002) into userdata\dlc_inbox\. Each one is installed
+  // once by the SDK's own installer (extracted to userdata\0000000000000000\545408BA\00000002\<name>\ with
+  // its .header), then the copy in the inbox is deleted. A hand-made header (2K16 launcher layout) was listed
+  // but crashed the game ("deferred completion threw 'Invalid UTF-8'"), so the SDK writes them itself.
+  void InstallDlcInbox() {
+    const auto inbox = user_data_root_ / "dlc_inbox";
+    std::error_code ec;
+    if (!std::filesystem::is_directory(inbox, ec)) return;
+    auto* content = REX_KERNEL_STATE()->content_manager();
+    if (!content) return;
+    for (const auto& entry : std::filesystem::directory_iterator(inbox, ec)) {
+      if (!entry.is_regular_file(ec)) continue;
+      const auto result = content->InstallContent(entry.path());
+      if (result == 0) {
+        REXLOG_INFO("[dlc] installed {}", entry.path().filename().string());
+        std::filesystem::remove(entry.path(), ec);
+      } else {
+        REXLOG_ERROR("[dlc] could not install {} (result {:#x})", entry.path().filename().string(), result);
+      }
+    }
+  }
+
   std::filesystem::path user_data_root_;
 };

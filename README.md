@@ -4,7 +4,7 @@ Unofficial native Windows x64 port of **WWE 2K17 (Xbox 360)**, made by staticall
 
 **This repository contains project code and documentation only. No game data is included or linked.** You need your own copy of the Xbox 360 game and its Title Update 2. Please do not ask for game files in the issues.
 
-> **Status: early work in progress.** The game (with Title Update 2) boots to its menus. Not tested further yet. No release.
+> **Status: early work in progress.** The game (with Title Update 2 and DLC) boots, plays its demo match and reaches the save screen. A match from the menus is not tested yet. No release.
 
 ## Building
 
@@ -22,6 +22,8 @@ Needs Windows 10/11 x64, Visual Studio 2022 (C++ workload), LLVM/Clang 20+, CMak
    ```powershell
    tools\build.ps1
    ```
+DLC: copy your own WWE 2K17 DLC packages into `userdata\dlc_inbox\`; the game installs them at the next start.
+
 3. Run in a window (log in `logs\`):
 
    ```powershell
