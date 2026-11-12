@@ -9,6 +9,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using Path = System.IO.Path;
 
 namespace Launcher;
@@ -20,6 +21,7 @@ public class LauncherSettings
     public bool VSync { get; set; } = false;
     public int Scale { get; set; } = 1;        // internal resolution multiplier (resolution_scale)
     public int Aniso { get; set; } = -1;       // -1 = game default, 0 = off, 1..5 = 1x..16x
+    public string Language { get; set; } = "english";
     public bool Vibration { get; set; } = true;
     public bool Mute { get; set; } = false;
     public string Extra { get; set; } = "";
@@ -29,6 +31,12 @@ public partial class MainWindow : Window
 {
     static readonly string[] Resolutions = { "1280x720", "1600x900", "1920x1080", "2560x1440", "3840x2160" };
     static readonly string[] AnisoNames = { "PAR DÉFAUT", "DÉSACTIVÉ", "1×", "2×", "4×", "8×", "16×" };
+    // Xbox 360 language ids (--user_language): the languages the game has text for.
+    static readonly (string Key, string Name, int Id)[] Languages =
+    {
+        ("english", "ENGLISH", 1), ("french", "FRANÇAIS", 4), ("german", "DEUTSCH", 3),
+        ("spanish", "ESPAÑOL", 5), ("italian", "ITALIANO", 6),
+    };
     static string OnOff(bool b) => b ? "OUI" : "NON";
     static Brush Hex(string h) => (Brush)new BrushConverter().ConvertFromString(h)!;
     static Color HexC(string h) => (Color)ColorConverter.ConvertFromString(h);
@@ -38,6 +46,12 @@ public partial class MainWindow : Window
     LauncherSettings cfg = new();
     Process? proc;
     bool loading = true, hasExe;
+    GameSetup setup = null!;
+    DlcStore dlc = null!;
+
+    // background job (install from ISO, title update, DLC)
+    bool busy;
+    CancellationTokenSource? jobCancel;
 
     class Item
     {
@@ -50,9 +64,11 @@ public partial class MainWindow : Window
         public bool IsText;
         public Func<bool> Enabled = () => true;
     }
-    readonly List<Item> menu = new(), options = new();
-    int screen, selMenu, selOpt;
-    TextBox extraBox = null!;
+    readonly List<Item> items = new();
+    readonly Dictionary<string, int> selByScreen = new();
+    string screen = "main";
+    int sel;
+    TextBox? extraBox;
 
     readonly Random rng = new();
     readonly List<(Ellipse e, double speed, double drift, double phase)> dust = new();
@@ -66,22 +82,22 @@ public partial class MainWindow : Window
         InitializeComponent();
         FindRoot();
         LoadSettings();
+        setup = new GameSetup(root);
+        dlc = new DlcStore(Path.Combine(root, "userdata"));
         LoadArt();
-        BuildMenu();
-        BuildOptions();
         BuildBackdrop();
-        RefreshChecks();
         CompositionTarget.Rendering += OnFrame;
 
         var ver = Path.Combine(root, "VERSION");
-        VersionText.Text = "LAUNCHER 0.3" + (File.Exists(ver) ? "  ·  PORT " + File.ReadAllText(ver).Trim().ToUpperInvariant() : "");
+        VersionText.Text = "LAUNCHER 0.4" + (File.Exists(ver) ? "  ·  PORT " + File.ReadAllText(ver).Trim().ToUpperInvariant() : "");
 
         var tick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         tick.Tick += (_, _) => TailLog();
         tick.Start();
 
         loading = false;
-        Loaded += (_, _) => { Focus(); ShowScreen(0); };
+        RefreshChecks();
+        Loaded += (_, _) => { Focus(); ShowScreen("main"); };
     }
 
     // ---- paths / settings / optional artwork ---------------------------------
@@ -109,6 +125,9 @@ public partial class MainWindow : Window
         }
         catch { cfg = new(); }
         if (!Resolutions.Contains(cfg.Resolution)) cfg.Resolution = "1600x900";
+        if (!Languages.Any(l => l.Key == cfg.Language)) cfg.Language = "english";
+        cfg.Scale = Math.Clamp(cfg.Scale, 1, 3);
+        cfg.Aniso = Math.Clamp(cfg.Aniso, -1, 5);
     }
 
     void SaveSettings()
@@ -122,7 +141,7 @@ public partial class MainWindow : Window
         catch { }
     }
 
-    // Optional files the user can drop in launcher_art\ : hero.png (right side), logo.png (top-left).
+    // Optional files in launcher_art\ : hero.png (right side) and logo.png (top-left). Never shipped.
     void LoadArt()
     {
         BitmapImage? Load(string name)
@@ -147,14 +166,16 @@ public partial class MainWindow : Window
         if (logo != null) { LogoImage.Source = logo; LogoImage.Visibility = Visibility.Visible; WweText.Visibility = Visibility.Collapsed; }
     }
 
-    // ---- bars (2K17 list style) ---------------------------------------------
-    Item MakeBar(Panel parent, string label, string info, bool hasValue, bool text)
+    // ---- list building ------------------------------------------------------------
+    Item Add(string label, string info, Action run, Func<string>? get = null, Action<int>? change = null,
+             Func<bool>? enabled = null, bool text = false)
     {
-        var l = new TextBlock { Text = label, FontSize = 19, VerticalAlignment = VerticalAlignment.Center };
-        var v = new TextBlock { FontSize = 17, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
+        var l = new TextBlock { Text = label, FontSize = 18, VerticalAlignment = VerticalAlignment.Center };
+        var v = new TextBlock { FontSize = 16, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
         var g = new Grid { Margin = new Thickness(12, 0, 12, 0) };
         g.Children.Add(l);
-        var item = new Item { Label = l, Value = v, Info = info, IsText = text };
+        var item = new Item { Label = l, Value = v, Info = info, Run = run, Get = get, Change = change, IsText = text };
+        if (enabled != null) item.Enabled = enabled;
         if (text)
         {
             extraBox = new TextBox
@@ -164,76 +185,115 @@ public partial class MainWindow : Window
                 VerticalAlignment = VerticalAlignment.Center, Text = cfg.Extra, Foreground = Brushes.White,
                 CaretBrush = Brushes.White, HorizontalContentAlignment = HorizontalAlignment.Right
             };
-            extraBox.TextChanged += (_, _) => { cfg.Extra = extraBox.Text; SaveSettings(); };
+            extraBox.TextChanged += (_, _) => { cfg.Extra = extraBox!.Text; SaveSettings(); };
             g.Children.Add(extraBox);
         }
-        else if (hasValue) g.Children.Add(v);
+        else if (get != null) g.Children.Add(v);
 
-        item.Bar = new Border
-        {
-            Height = 36, Margin = new Thickness(0, 0, 0, 7), Child = g, Cursor = Cursors.Hand,
-            BorderThickness = new Thickness(2)
-        };
-        parent.Children.Add(item.Bar);
+        item.Bar = new Border { Height = 34, Margin = new Thickness(0, 0, 0, 6), Child = g, Cursor = Cursors.Hand, BorderThickness = new Thickness(2) };
+        int idx = items.Count;
+        item.Bar.MouseEnter += (_, _) => Select(idx);
+        item.Bar.MouseLeftButtonUp += (_, _) => { Select(idx); Activate(item, 1); };
+        items.Add(item);
+        ItemsPanel.Children.Add(item.Bar);
         return item;
     }
 
-    void BuildMenu()
+    void Back() => Add("RETOUR", "Revenir au menu principal.", () => ShowScreen("main"));
+
+    void ShowScreen(string name)
     {
-        void Add(string label, string info, Action run, Func<bool>? en = null)
+        if (busy && name != screen && screen != "main") { /* keep the screen the job started from */ }
+        selByScreen[screen] = sel;
+        screen = name;
+        items.Clear();
+        ItemsPanel.Children.Clear();
+        extraBox = null;
+        LogoBox.Visibility = name == "main" ? Visibility.Visible : Visibility.Collapsed;
+        switch (name)
         {
-            var it = MakeBar(MenuPanel, label, info, false, false);
-            it.Run = run;
-            if (en != null) it.Enabled = en;
-            int i = menu.Count;
-            it.Bar.MouseEnter += (_, _) => { if (screen == 0) SelectMenu(i); };
-            it.Bar.MouseLeftButtonUp += (_, _) => { if (screen == 0) { SelectMenu(i); if (it.Enabled()) it.Run(); } };
-            menu.Add(it);
+            case "settings": BuildSettings(); ScreenTitle.Text = "PARAMÈTRES"; break;
+            case "files": BuildFiles(); ScreenTitle.Text = "FICHIERS DU JEU"; break;
+            case "dlc": BuildDlc(); ScreenTitle.Text = "CONTENU TÉLÉCHARGEABLE"; break;
+            default: BuildMain(); ScreenTitle.Text = "MENU PRINCIPAL"; break;
         }
-        Add("JOUER", "Lance WWE 2K17 avec tes paramètres.", Play, () => hasExe || proc != null);
-        Add("PARAMÈTRES", "Mode d'affichage, résolution et options avancées.", () => ShowScreen(1));
-        Add("SAUVEGARDES", "Ouvre le dossier des sauvegardes et données (userdata).", () => OpenDir("userdata"));
-        Add("JOURNAUX", "Ouvre le dossier des logs : utile si le jeu plante.", OpenLogs);
-        Add("DOSSIER DU JEU", "Ouvre le dossier du projet dans l'explorateur.", OpenFolder);
+        Select(selByScreen.TryGetValue(name, out var s) ? s : 0);
+        Keyboard.ClearFocus();
+        Focus();
+    }
+
+    void Rebuild() => ShowScreen(screen);
+
+    void BuildMain()
+    {
+        Add("JOUER", "Lance WWE 2K17 avec tes paramètres.", Play, enabled: () => (hasExe && setup.HasGame && !busy) || proc != null)
+            .Label.Text = proc != null ? "ARRÊTER LE JEU" : "JOUER";
+        Add("PARAMÈTRES", "Affichage, résolution, langue, son et manette.", () => ShowScreen("settings"));
+        Add("FICHIERS DU JEU", "Installe le jeu depuis ton ISO, ajoute le Title Update 2, ouvre les dossiers.", () => ShowScreen("files"));
+        Add("DLC", "Ajoute ou retire les contenus téléchargeables (DLC).", () => ShowScreen("dlc"));
         Add("QUITTER", "Ferme le launcher.", Close);
     }
 
-    void BuildOptions()
+    void BuildSettings()
     {
-        void Add(string label, string info, Func<string>? get, Action<int>? change, bool text = false)
-        {
-            var it = MakeBar(OptionsPanel, label, info, get != null, text);
-            it.Get = get; it.Change = change;
-            int i = options.Count;
-            it.Bar.MouseEnter += (_, _) => { if (screen == 1) SelectOpt(i); };
-            it.Bar.MouseLeftButtonUp += (_, _) => { if (screen == 1) { SelectOpt(i); ActivateOpt(it, 1); } };
-            options.Add(it);
-        }
-        Add("AFFICHAGE", "Fenêtré ou plein écran.", () => cfg.Fullscreen ? "PLEIN ÉCRAN" : "FENÊTRÉ", _ => cfg.Fullscreen = !cfg.Fullscreen);
-        Add("RÉSOLUTION", "Taille de la fenêtre du jeu (720p, 900p, 1080p, 1440p, 4K).", () => cfg.Resolution.Replace("x", " × "), d =>
+        Add("AFFICHAGE", "Fenêtré ou plein écran.", () => { }, () => cfg.Fullscreen ? "PLEIN ÉCRAN" : "FENÊTRÉ", _ => cfg.Fullscreen = !cfg.Fullscreen);
+        Add("RÉSOLUTION", "Taille de la fenêtre du jeu (720p, 900p, 1080p, 1440p, 4K).", () => { }, () => cfg.Resolution.Replace("x", " × "), d =>
         {
             int i = Array.IndexOf(Resolutions, cfg.Resolution);
             cfg.Resolution = Resolutions[(i + d + Resolutions.Length) % Resolutions.Length];
         });
-        Add("V-SYNC", "Synchronise l'image avec l'écran pour éviter les déchirures. Peut ajouter un peu de latence.",
+        Add("V-SYNC", "Synchronise l'image avec l'écran pour éviter les déchirures. Peut ajouter un peu de latence.", () => { },
             () => OnOff(cfg.VSync), _ => cfg.VSync = !cfg.VSync);
-        Add("RÉSOLUTION INTERNE", "Multiplie la finesse du rendu (1× = comme la Xbox 360). Plus haut = plus net mais plus lourd.",
+        Add("RÉSOLUTION INTERNE", "Multiplie la finesse du rendu (1× = comme la Xbox 360). Plus haut = plus net mais plus lourd.", () => { },
             () => cfg.Scale + "×", d => cfg.Scale = ((cfg.Scale - 1 + d + 3) % 3) + 1);
-        Add("FILTRAGE ANISOTROPE", "Textures plus nettes vues de biais.",
+        Add("FILTRAGE ANISOTROPE", "Textures plus nettes vues de biais.", () => { },
             () => AnisoNames[cfg.Aniso + 1], d => cfg.Aniso = ((cfg.Aniso + 1 + d + AnisoNames.Length) % AnisoNames.Length) - 1);
-        Add("VIBRATION", "Vibration de la manette.", () => OnOff(cfg.Vibration), _ => cfg.Vibration = !cfg.Vibration);
-        Add("COUPER LE SON", "Lance le jeu sans son.", () => OnOff(cfg.Mute), _ => cfg.Mute = !cfg.Mute);
-        Add("OPTIONS AVANCÉES", "Arguments en plus pour le jeu (facultatif). Entrée pour écrire, Échap pour finir.", null, null, text: true);
-        int backIdx = options.Count;
-        var back = MakeBar(OptionsPanel, "RETOUR", "Revenir au menu principal.", false, false);
-        back.Run = () => ShowScreen(0);
-        back.Bar.MouseEnter += (_, _) => { if (screen == 1) SelectOpt(backIdx); };
-        back.Bar.MouseLeftButtonUp += (_, _) => { if (screen == 1) ShowScreen(0); };
-        options.Add(back);
+        Add("LANGUE DU JEU", "Langue des textes du jeu (le launcher reste en français).", () => { },
+            () => Languages.First(l => l.Key == cfg.Language).Name, d =>
+            {
+                int i = Array.FindIndex(Languages, l => l.Key == cfg.Language);
+                cfg.Language = Languages[(i + d + Languages.Length) % Languages.Length].Key;
+            });
+        Add("VIBRATION", "Vibration de la manette.", () => { }, () => OnOff(cfg.Vibration), _ => cfg.Vibration = !cfg.Vibration);
+        Add("COUPER LE SON", "Lance le jeu sans son.", () => { }, () => OnOff(cfg.Mute), _ => cfg.Mute = !cfg.Mute);
+        Add("OPTIONS AVANCÉES", "Arguments en plus pour le jeu (facultatif). Entrée pour écrire, Échap pour finir.", () => { }, text: true);
+        Back();
     }
 
-    // ---- selection styling ---------------------------------------------------
-    void Style(Item it, bool on)
+    void BuildFiles()
+    {
+        Add("INSTALLER DEPUIS UN ISO", "Choisis ton image disque WWE 2K17 (.iso) : le launcher extrait le jeu dans game\\ (environ 9 Go).",
+            InstallIso, () => setup.HasGame ? "INSTALLÉ" : "À FAIRE", enabled: () => !busy);
+        Add("INSTALLER DEPUIS UN DOSSIER", "Choisis le dossier du disque déjà extrait (celui qui contient default.xex) : il est copié dans game\\.",
+            InstallFolder, enabled: () => !busy);
+        Add("INSTALLER LE TITLE UPDATE 2", "Choisis le fichier tu00000001_00000000 : le launcher l'extrait et l'applique au jeu.",
+            InstallTitleUpdate, () => setup.HasTitleUpdate ? "INSTALLÉ" : "À FAIRE", enabled: () => !busy);
+        Add("OUVRIR LES SAUVEGARDES", "Ouvre le dossier des sauvegardes et données (userdata).", () => OpenDir("userdata"));
+        Add("OUVRIR LES JOURNAUX", "Ouvre le dossier des logs : utile si le jeu plante.", () => OpenDir("logs"));
+        Add("OUVRIR LE DOSSIER DU JEU", "Ouvre le dossier du projet dans l'explorateur.", () => OpenDir(""));
+        Back();
+    }
+
+    void BuildDlc()
+    {
+        Add("AJOUTER DES FICHIERS DLC", "Choisis un ou plusieurs paquets DLC Xbox 360 (les fichiers sans extension, noms en chiffres et lettres).",
+            AddDlcFiles, enabled: () => !busy);
+        Add("AJOUTER UN DOSSIER DE DLC", "Choisis un dossier : tous les paquets DLC trouvés dedans (sous-dossiers compris) sont ajoutés.",
+            AddDlcFolder, enabled: () => !busy);
+        List<DlcStore.InstalledDlc> installed;
+        try { installed = dlc.List(); } catch { installed = new(); }
+        foreach (var d in installed)
+        {
+            var d1 = d;
+            Add(d.DisplayName.Length > 0 ? d.DisplayName.ToUpperInvariant() : d.Name.ToUpperInvariant(),
+                $"{d.SizeBytes / 1048576} Mo installés. Entrée pour retirer ce DLC.", () => RemoveDlc(d1), () => "INSTALLÉ", enabled: () => !busy);
+        }
+        if (installed.Count == 0) { /* nothing yet: the info line explains */ }
+        Back();
+    }
+
+    // ---- selection styling ---------------------------------------------------------
+    void StyleItem(Item it, bool on)
     {
         bool en = it.Enabled();
         if (on)
@@ -251,47 +311,31 @@ public partial class MainWindow : Window
         var fg = Hex(on ? "#FFFFFF" : en ? "#DCDCE0" : "#6A6A70");
         it.Label.Foreground = fg;
         it.Value.Foreground = fg;
+        if (it.IsText && extraBox != null) extraBox.Foreground = Brushes.White;
+        if (it.Get != null)
+            it.Value.Text = (on && it.Change != null ? "◄  " : "") + it.Get() + (on && it.Change != null ? "  ►" : "");
     }
 
-    void SelectMenu(int i)
+    void Select(int i)
     {
-        selMenu = Math.Clamp(i, 0, menu.Count - 1);
-        for (int k = 0; k < menu.Count; k++) Style(menu[k], k == selMenu);
-        InfoText.Text = menu[selMenu].Info;
+        if (items.Count == 0) return;
+        sel = Math.Clamp(i, 0, items.Count - 1);
+        for (int k = 0; k < items.Count; k++) StyleItem(items[k], k == sel);
+        InfoText.Text = items[sel].Info;
+        if (screen == "dlc" && sel == 2 && items.Count == 3) InfoText.Text = "Aucun DLC installé pour l'instant.";
     }
 
-    void SelectOpt(int i)
+    void Activate(Item it, int dir)
     {
-        selOpt = Math.Clamp(i, 0, options.Count - 1);
-        for (int k = 0; k < options.Count; k++)
+        if (it.IsText) { extraBox?.Focus(); if (extraBox != null) extraBox.CaretIndex = extraBox.Text.Length; return; }
+        if (!it.Enabled()) return;
+        if (it.Change != null)
         {
-            var it = options[k];
-            Style(it, k == selOpt);
-            if (it.Get != null) it.Value.Text = (k == selOpt ? "◄  " : "") + it.Get() + (k == selOpt ? "  ►" : "");
+            it.Change(dir);
+            SaveSettings();
+            Select(sel);
         }
-        if (extraBox != null) extraBox.Foreground = Brushes.White;
-        InfoText.Text = options[selOpt].Info;
-    }
-
-    void ActivateOpt(Item it, int dir)
-    {
-        if (it.IsText) { extraBox.Focus(); extraBox.CaretIndex = extraBox.Text.Length; return; }
-        if (it.Change == null) { it.Run(); return; }
-        it.Change(dir);
-        SaveSettings();
-        SelectOpt(selOpt);
-    }
-
-    void ShowScreen(int s)
-    {
-        screen = s;
-        MenuPanel.Visibility = s == 0 ? Visibility.Visible : Visibility.Collapsed;
-        OptionsPanel.Visibility = s == 1 ? Visibility.Visible : Visibility.Collapsed;
-        ScreenTitle.Text = s == 0 ? "MENU PRINCIPAL" : "PARAMÈTRES";
-        LogoBox.Visibility = s == 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (s == 0) SelectMenu(selMenu); else SelectOpt(selOpt);
-        Keyboard.ClearFocus();
-        Focus();
+        else it.Run();
     }
 
     void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -303,32 +347,33 @@ public partial class MainWindow : Window
         }
         switch (e.Key)
         {
-            case Key.Up when screen == 0: SelectMenu(selMenu - 1); break;
-            case Key.Down when screen == 0: SelectMenu(selMenu + 1); break;
-            case Key.Enter or Key.Space when screen == 0: if (menu[selMenu].Enabled()) menu[selMenu].Run(); break;
-            case Key.Up when screen == 1: SelectOpt(selOpt - 1); break;
-            case Key.Down when screen == 1: SelectOpt(selOpt + 1); break;
-            case Key.Left when screen == 1: ActivateOpt(options[selOpt], -1); break;
-            case Key.Right or Key.Enter when screen == 1: ActivateOpt(options[selOpt], 1); break;
-            case Key.Escape when screen == 1: ShowScreen(0); break;
+            case Key.Up: Select(sel - 1); break;
+            case Key.Down: Select(sel + 1); break;
+            case Key.Left when items[sel].Change != null: Activate(items[sel], -1); break;
+            case Key.Right when items[sel].Change != null: Activate(items[sel], 1); break;
+            case Key.Enter or Key.Space: Activate(items[sel], 1); break;
+            case Key.Escape:
+                if (busy) { jobCancel?.Cancel(); }
+                else if (screen != "main") ShowScreen("main");
+                break;
             default: return;
         }
         e.Handled = true;
     }
 
-    // ---- readiness -----------------------------------------------------------
+    // ---- readiness -----------------------------------------------------------------
     void RefreshChecks()
     {
         Checks.Children.Clear();
         hasExe = File.Exists(exe);
-        bool hasGame = File.Exists(Path.Combine(root, "game", "default.xex"));
-        var tu = Path.Combine(root, "userdata", "title_update");
-        bool hasTu = Directory.Exists(tu) && Directory.EnumerateFileSystemEntries(tu).Any();
         AddCheck("MOTEUR", hasExe);
-        AddCheck("DONNÉES DU JEU", hasGame);
-        AddCheck("TITLE UPDATE 2", hasTu);
-        if (!hasExe) StatusText.Text = "Le moteur n'est pas compilé : lance tools\\build.ps1.";
-        UpdatePlay();
+        AddCheck("DONNÉES DU JEU", setup.HasGame);
+        AddCheck("TITLE UPDATE 2", setup.HasTitleUpdate);
+        if (!busy)
+        {
+            if (!hasExe) StatusText.Text = "Le moteur n'est pas compilé : lance tools\\build.ps1.";
+            else if (!setup.HasGame) StatusText.Text = "Le jeu n'est pas installé : va dans FICHIERS DU JEU.";
+        }
     }
 
     void AddCheck(string name, bool ok)
@@ -340,20 +385,128 @@ public partial class MainWindow : Window
         Checks.Children.Add(row);
     }
 
-    void UpdatePlay()
+    // ---- background jobs ---------------------------------------------------------------
+    // Runs `work` off the UI thread with a progress bar; Échap cancels it.
+    async void RunJob(string label, Func<Action<long, long>, CancellationToken, string?> work)
     {
-        var p = menu[0];
-        p.Label.Text = proc != null ? "ARRÊTER LE JEU" : "JOUER";
-        p.Info = proc != null ? "Le jeu tourne. Force sa fermeture si besoin." : "Lance WWE 2K17 avec tes paramètres.";
-        if (screen == 0) SelectMenu(selMenu);
+        if (busy) return;
+        busy = true;
+        jobCancel = new CancellationTokenSource();
+        ProgressTrack.Visibility = Visibility.Visible;
+        ProgressFill.Width = 0;
+        StatusText.Text = label + " (Échap pour annuler)";
+        double lastShown = -1;
+        void Progress(long done, long total)
+        {
+            double f = total > 0 ? (double)done / total : 0;
+            if (f - lastShown < 0.002 && f < 1) return;
+            lastShown = f;
+            Dispatcher.BeginInvoke(() =>
+            {
+                ProgressFill.Width = ProgressTrack.Width * Math.Clamp(f, 0, 1);
+                StatusText.Text = $"{label} : {f * 100:0}%  (Échap pour annuler)";
+            });
+        }
+        string result;
+        try
+        {
+            var token = jobCancel.Token;
+            result = await Task.Run(() => work(Progress, token)) ?? "Terminé.";
+        }
+        catch (OperationCanceledException) { result = "Annulé."; }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
+        { result = "Erreur : " + ex.Message; }
+        busy = false;
+        jobCancel = null;
+        ProgressTrack.Visibility = Visibility.Collapsed;
+        StatusText.Text = result;
+        RefreshChecks();
+        if (!StatusText.Text.StartsWith("Erreur")) StatusText.Text = result;
+        Rebuild();
     }
 
-    // ---- launching -------------------------------------------------------------
+    void InstallIso()
+    {
+        var dlg = new OpenFileDialog { Title = "Choisis l'image disque de WWE 2K17", Filter = "Image disque Xbox 360 (*.iso)|*.iso|Tous les fichiers|*.*" };
+        if (dlg.ShowDialog(this) != true) return;
+        if (!ConfirmOverwrite()) return;
+        string iso = dlg.FileName;
+        RunJob("Extraction du disque", (p, ct) => { setup.InstallIso(iso, p, ct); return "Jeu installé dans game\\. Ajoute maintenant le Title Update 2."; });
+    }
+
+    void InstallFolder()
+    {
+        var dlg = new OpenFolderDialog { Title = "Choisis le dossier du disque extrait (celui qui contient default.xex)" };
+        if (dlg.ShowDialog(this) != true) return;
+        if (!ConfirmOverwrite()) return;
+        string dir = dlg.FolderName;
+        RunJob("Copie du jeu", (p, ct) => { setup.InstallFolder(dir, p, ct); return "Jeu copié dans game\\."; });
+    }
+
+    bool ConfirmOverwrite() =>
+        !setup.HasGame || MessageBox.Show(this, "Le dossier game\\ contient déjà un jeu. Les fichiers identiques seront remplacés. Continuer ?",
+            "WWE 2K17 PC", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+    void InstallTitleUpdate()
+    {
+        var dlg = new OpenFileDialog { Title = "Choisis le Title Update 2 (tu00000001_00000000)", Filter = "Tous les fichiers|*.*" };
+        if (dlg.ShowDialog(this) != true) return;
+        string pkg = dlg.FileName;
+        RunJob("Installation du Title Update", (p, ct) =>
+        {
+            string name = setup.InstallTitleUpdate(pkg, p);
+            return $"Title Update installé ({name}).";
+        });
+    }
+
+    void AddDlcFiles()
+    {
+        var dlg = new OpenFileDialog { Title = "Choisis les paquets DLC de WWE 2K17", Multiselect = true, Filter = "Tous les fichiers|*.*" };
+        if (dlg.ShowDialog(this) != true) return;
+        InstallDlc(dlg.FileNames);
+    }
+
+    void AddDlcFolder()
+    {
+        var dlg = new OpenFolderDialog { Title = "Choisis le dossier qui contient les DLC" };
+        if (dlg.ShowDialog(this) != true) return;
+        var found = new DirectoryInfo(dlg.FolderName).EnumerateFiles("*", SearchOption.AllDirectories)
+            .Where(f => f.Length > 0x1000 && StfsPackage.HasPackageMagic(f.FullName)).Select(f => f.FullName).ToArray();
+        if (found.Length == 0) { StatusText.Text = "Aucun paquet DLC trouvé dans ce dossier."; return; }
+        InstallDlc(found);
+    }
+
+    void InstallDlc(string[] files)
+    {
+        RunJob($"Installation de {files.Length} DLC", (p, ct) =>
+        {
+            int ok = 0;
+            var problems = new List<string>();
+            foreach (var f in files)
+            {
+                ct.ThrowIfCancellationRequested();
+                var r = dlc.Install(f, p);
+                if (r.Ok) ok++; else problems.Add($"{r.File} : {r.Message}");
+            }
+            return $"{ok} DLC installé(s)." + (problems.Count > 0 ? " Problème : " + problems[0] : "");
+        });
+    }
+
+    void RemoveDlc(DlcStore.InstalledDlc d)
+    {
+        if (MessageBox.Show(this, $"Retirer « {d.DisplayName} » ?", "WWE 2K17 PC", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        try { dlc.Remove(d.Name); StatusText.Text = "DLC retiré."; }
+        catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
+        { StatusText.Text = "Impossible de retirer ce DLC : " + ex.Message; }
+        Rebuild();
+    }
+
+    // ---- launching -------------------------------------------------------------------------
     void Play()
     {
         if (proc != null) { try { proc.Kill(true); } catch { } return; }
         RefreshChecks();
-        if (!hasExe) return;
+        if (!hasExe || !setup.HasGame) return;
 
         var res = cfg.Resolution.Split('x');
         Directory.CreateDirectory(Path.Combine(root, "logs"));
@@ -372,6 +525,7 @@ public partial class MainWindow : Window
         A("--gpu_vsync=" + (cfg.VSync ? "true" : "false"));
         if (cfg.Scale > 1) A("--resolution_scale=" + cfg.Scale);
         if (cfg.Aniso >= 0) A("--anisotropic_override=" + cfg.Aniso);
+        A("--user_language=" + Languages.First(l => l.Key == cfg.Language).Id);
         A("--vibration=" + (cfg.Vibration ? "true" : "false"));
         if (cfg.Mute) A("--audio_mute=true");
         foreach (var extra in cfg.Extra.Split(' ', StringSplitOptions.RemoveEmptyEntries)) A(extra);
@@ -390,16 +544,16 @@ public partial class MainWindow : Window
                 StatusText.Text = code == 0
                     ? $"Jeu fermé normalement ({span:mm\\:ss})."
                     : $"Le jeu s'est arrêté (code {code}) après {span:mm\\:ss}. Regarde les journaux.";
-                UpdatePlay();
+                Rebuild();
             });
             StatusText.Text = $"Jeu lancé (PID {p.Id}). Bon match !";
-            UpdatePlay();
+            Rebuild();
         }
         catch (Exception ex)
         {
             proc = null;
             StatusText.Text = "Impossible de lancer le jeu : " + ex.Message;
-            UpdatePlay();
+            Rebuild();
         }
     }
 
@@ -420,17 +574,12 @@ public partial class MainWindow : Window
         catch { }
     }
 
-    void OpenLogs() => OpenDir("logs");
-
     void OpenDir(string sub)
     {
-        var d = Path.Combine(root, sub);
+        var d = sub.Length == 0 ? root : Path.Combine(root, sub);
         Directory.CreateDirectory(d);
         Process.Start(new ProcessStartInfo("explorer.exe", $"\"{d}\"") { UseShellExecute = true });
     }
-
-    void OpenFolder() =>
-        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{root}\"") { UseShellExecute = true });
 
     void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -439,7 +588,7 @@ public partial class MainWindow : Window
     void Min_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     void Close_Click(object sender, RoutedEventArgs e) => Close();
 
-    // ---- backdrop: smoke, stadium lights, dust ---------------------------------
+    // ---- backdrop: smoke, stadium lights, dust -----------------------------------------------
     void BuildBackdrop()
     {
         for (int i = 0; i < 5; i++)
@@ -454,7 +603,6 @@ public partial class MainWindow : Window
             Smoke.Children.Add(e);
             smoke.Add((e, 6 + rng.NextDouble() * 10, rng.NextDouble() * 6.28, rng.NextDouble() * 1000 - 200));
         }
-        // two rows of 3 lamps, top-right, like the 2K17 menus
         for (int row = 0; row < 2; row++)
             for (int k = 0; k < 6; k++)
             {
@@ -511,6 +659,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        jobCancel?.Cancel();
         CompositionTarget.Rendering -= OnFrame;
         base.OnClosed(e);
     }
