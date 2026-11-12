@@ -86,3 +86,15 @@ The game reaches its menus (One on One match type list). What it took, in order:
   Hooks moved: ranged physical alloc 0x822516F0, XamContentCreateEx 0x82B8E734.
 - Result: 2+ minutes, all 6 DLC opened, RAW arena entrance renders. DLC message not re-checked yet (needs
   the menus).
+
+### Discrete GPU (2026-11-12, night)
+
+- The user's first real test ran on the Intel UHD although the laptop was plugged in and the RTX 5070 visible:
+  the SDK's `d3d12_adapter = -1` takes the first DXGI adapter. `Wwe2k17App::OnPreSetup` now sets
+  `d3d12_adapter` to the adapter with the most dedicated video memory (unless the player set it), and
+  `main.cpp` exports NvOptimusEnablement / AmdPowerXpressRequestHighPerformance as 2K15 does.
+- The 4,278 "page count too big" + ~4,800 parent-heap lines at match load are the same allocator probes 2K15
+  measured (4,281) and found harmless.
+- Not ported yet from 2K15 (TU4 addresses there, each needs its 2K17 function found by shape): render-thread
+  ring-wait sleep (CPU), SetFrameRate 60 fps, job hand-off order (freezes on 2-4 thread CPUs), NULL-pointer
+  crash guards, camera cuts on finishers, "Xbox 360" -> "PC" texts, crash reports, launcher.

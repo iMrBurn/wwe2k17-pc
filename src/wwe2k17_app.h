@@ -4,8 +4,18 @@
 
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <system_error>
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <dxgi.h>
+#pragma comment(lib, "dxgi.lib")
+#endif
+
+#include <rex/cvar.h>
 #include <rex/filesystem.h>
 #include <rex/filesystem/devices/host_path_device.h>
 #include <rex/filesystem/vfs.h>
@@ -21,6 +31,40 @@ class Wwe2k17App : public rex::ReXApp {
       rex::ui::WindowedAppContext& ctx) {
     return std::unique_ptr<Wwe2k17App>(new Wwe2k17App(ctx, "wwe2k17",
         PPCImageConfig));
+  }
+
+  // The SDK's d3d12_adapter = -1 takes the first hardware DXGI adapter, which on a laptop is the integrated GPU
+  // (a first test ran on the Intel UHD next to an RTX 5070). Unless the player chose an adapter, use the one
+  // with the most dedicated video memory.
+  void OnPreSetup(rex::RuntimeConfig& config) override {
+    (void)config;
+#if defined(_WIN32)
+    if (rex::cvar::HasNonDefaultValue("d3d12_adapter")) return;
+    IDXGIFactory1* factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) return;
+    int best = -1, index = 0;
+    SIZE_T best_vram = 0;
+    std::string best_name;
+    IDXGIAdapter1* adapter = nullptr;
+    for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
+      DXGI_ADAPTER_DESC1 desc{};
+      adapter->GetDesc1(&desc);
+      adapter->Release();
+      if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
+      if (desc.DedicatedVideoMemory > best_vram) {
+        best_vram = desc.DedicatedVideoMemory;
+        best = static_cast<int>(i);
+        best_name.clear();
+        for (const wchar_t* c = desc.Description; *c; ++c) best_name += *c < 0x80 ? static_cast<char>(*c) : '?';
+      }
+      ++index;
+    }
+    factory->Release();
+    if (best > 0) {  // 0 is what the SDK picks anyway
+      rex::cvar::SetFlagByName("d3d12_adapter", std::to_string(best));
+      REXLOG_INFO("[gpu] using adapter {} ({}, {} MB video memory)", best, best_name, best_vram >> 20);
+    }
+#endif
   }
 
   void OnConfigurePaths(rex::PathConfig& paths) override {
