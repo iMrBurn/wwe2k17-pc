@@ -15,6 +15,7 @@ set(WWE2K17_SOURCES
     src/main.cpp
     src/memory_hooks.cpp
     src/content_hooks.cpp
+    src/render_hooks.cpp
 )
 
 if(WIN32)

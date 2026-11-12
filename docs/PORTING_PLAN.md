@@ -98,3 +98,16 @@ The game reaches its menus (One on One match type list). What it took, in order:
 - Not ported yet from 2K15 (TU4 addresses there, each needs its 2K17 function found by shape): render-thread
   ring-wait sleep (CPU), SetFrameRate 60 fps, job hand-off order (freezes on 2-4 thread CPUs), NULL-pointer
   crash guards, camera cuts on finishers, "Xbox 360" -> "PC" texts, crash reports, launcher.
+
+### Render wait, pacing, and the D3D12 hang (2026-11-12, night)
+
+- The XDK D3D library sits at a constant offset from 2K15 TU4 here too: D3DDevice_Swap (only VdSwap caller)
+  is sub_82BB2488 = 2K15 sub_82BADF20 + 0x4568. Predicted ring poll sub_82BB0C18 (has the db16cyc delays),
+  ring/fence waits sub_82BB46E8 / sub_82BB40E0 (both call the poll): all are function starts.
+  `src/render_hooks.cpp`: 2K15's ring-wait yield + a "Guest pacing" log line every 5 s from Swap.
+- Before the yield, on D3D12: game 221 % of a core, one thread 87 %.
+- With the RTX 5070: 60.0 fps steady in the attract demo, then
+  `D3D12 device removed: HRESULT 0x887A0006 - DEVICE_HUNG` about 100 s after launch, when the demo match
+  loads. Same as 2K15 (TDR in the first 3D scene, NVIDIA and AMD; readback_resolve=none avoids it but draws
+  nothing). 2K15/2K16 use the Vulkan backend; the prebuilt v0.10.1 plugin has none, so the SDK has to be
+  built from source with REXGLUE_USE_VULKAN=ON (2K16: tools/setup.ps1 / build-sdk10.ps1).
