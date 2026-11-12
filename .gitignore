@@ -1,0 +1,23 @@
+# Game files (never in Git): bring your own copy of WWE 2K17 (Xbox 360) and its Title Update 2
+*.iso
+*.xex
+*.xexp
+*.xcp
+/game/
+/game_tu/
+tu0000*
+
+# ReXGlue SDK release (downloaded by tools\setup.ps1) and generated code
+/sdk/
+/generated/*
+!/generated/rexglue.cmake
+
+# Build products, logs, dumps
+/out/
+/build/
+/dist/
+/work/
+/logs/
+*.log
+*.dmp
+CMakeUserPresets.json
