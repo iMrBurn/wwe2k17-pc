@@ -1,0 +1,4 @@
+# The CRT's setjmp / longjmp of WWE 2K17 + Title Update 2 (jmp_buf in r3), found by tools/find_functions.py.
+# Recompiled as plain code they break error paths (libjpeg decodes, as in WWE 2K16); the codegen replaces calls.
+setjmp_address = 0x831BA200
+longjmp_address = 0x831B9EE0

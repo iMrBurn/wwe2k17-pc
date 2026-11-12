@@ -17,7 +17,14 @@ Code, commits and docs in English. Commit as `iMrBurn <267004884+iMrBurn@users.n
   Work copies: `game_tu/` (default.xex + default.xexp), `..\tu2\` (unzipped Title Update 2).
 - Ask before launching the game when the user may be using the PC.
 
-## Build
-- `tools\setup.ps1 -Iso <iso> -TitleUpdate <tu00000001_00000000>` then `tools\build.ps1`.
+## Build and run
+- `tools\setup.ps1 -Iso <iso> -TitleUpdate <tu00000001_00000000>` then `tools\build.ps1`
+  (`-NoCodegen` after a source-only change), then `tools\run.ps1` (window + `logs\run-*.log`).
+  Close `wwe2k17.exe` before building: the link fails while it runs.
 - Codegen input: `wwe2k17_manifest.toml` -> `generated/default` (ignored). Missing entry points go in
-  `config/functions.toml` (UnresolvedCall lines of the codegen log).
+  `config/functions.toml` (UnresolvedCall lines of the codegen log); pointer-only functions come from
+  `tools/find_functions.py` + `tools/make_fptrs.py` (`config/functions_fptrs.toml`, `config/setjmp.toml`).
+- The stock SDK cannot be patched here: game-specific fixes go through `[[midasm_hook]]` (`config/hooks.toml`,
+  `src/*_hooks.cpp`) and `Wwe2k17App` overrides (`src/wwe2k17_app.h`). Runtime settings:
+  `wwe2k17_runtime.toml` (copied as `wwe2k17.toml` next to the exe; `gpu_plugin = "xenos"` is required).
+- `tools\capture_window.ps1 -Out logs\shot.png` saves an image of the game window.

@@ -24,5 +24,6 @@ try {
     }
     Invoke-Checked cmake --preset $Preset "-DCMAKE_PREFIX_PATH=$Sdk"
     Invoke-Checked cmake --build --preset $Preset
+    Copy-Item "$Root\wwe2k17_runtime.toml" "$Root\out\build\$Preset\wwe2k17.toml" -Force
 } finally { Pop-Location }
 Write-Host "Done: out\build\$Preset\wwe2k17.exe" -ForegroundColor Green

@@ -1,0 +1,11 @@
+# Runtime settings, copied next to the exe as wwe2k17.toml by tools\build.ps1.
+
+# Load the Xenos GPU emulation plugin (rexgpu-xenos.dll). Without it the stock SDK runs with no GPU
+# at all: the kernel ignores the game's ring buffer setup and nothing is ever drawn.
+gpu_plugin = "xenos"
+
+# WWE 2K15 / 2K16 PC: D3D12 hung on these titles; use the Vulkan backend of the same plugin.
+gpu_backend = "vulkan"
+vulkan_device = -1
+async_shader_compilation = true
+gpu_vsync = false

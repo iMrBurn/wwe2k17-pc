@@ -10,4 +10,4 @@ game_root = "game_tu"
 [entrypoint]
 file_path = "game_tu/default.xex"
 out_directory_path = "generated/default"
-includes = ["config/functions.toml"]
+includes = ["config/setjmp.toml", "config/functions.toml", "config/functions_fptrs.toml", "config/hooks.toml"]

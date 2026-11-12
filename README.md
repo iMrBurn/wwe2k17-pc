@@ -4,7 +4,7 @@ Unofficial native Windows x64 port of **WWE 2K17 (Xbox 360)**, made by staticall
 
 **This repository contains project code and documentation only. No game data is included or linked.** You need your own copy of the Xbox 360 game and its Title Update 2. Please do not ask for game files in the issues.
 
-> **Status: early work in progress.** The game code translates (codegen) from the updated game; nothing is playable yet. No release.
+> **Status: early work in progress.** The game (with Title Update 2) boots to its menus. Not tested further yet. No release.
 
 ## Building
 
@@ -16,11 +16,16 @@ Needs Windows 10/11 x64, Visual Studio 2022 (C++ workload), LLVM/Clang 20+, CMak
    tools\setup.ps1 -Iso "D:\WWE 2K17.iso" -TitleUpdate "D:\tu00000001_00000000"
    ```
 
-   This downloads the ReXGlue SDK v0.10.1 release into `sdk\` and writes `game_tu\default.xex` + `game_tu\default.xexp` (ignored by Git).
+   This downloads the ReXGlue SDK v0.10.1 release into `sdk\`, extracts the disc to `game\` and the update to `userdata\title_update\`, and prepares `game_tu\` for the code generator (all ignored by Git).
 2. Translate and compile:
 
    ```powershell
    tools\build.ps1
+   ```
+3. Run in a window (log in `logs\`):
+
+   ```powershell
+   tools\run.ps1
    ```
 
 ## Layout

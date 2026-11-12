@@ -1,0 +1,7 @@
+# Mid-assembly hooks ([[midasm_hook]]); the functions live in src/.
+
+# src/memory_hooks.cpp: ranged physical allocations, Yuke's engine (2K15/2K16 patched the SDK for it).
+[[midasm_hook]]
+name = "Wwe2k17RangedPhysicalAllocHook"
+address = 0x82241770
+registers = ["r6", "r7"]

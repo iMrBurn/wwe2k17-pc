@@ -51,11 +51,37 @@ class Stfs:
                 "blocks": i24le(e, 0x29),
                 "start": i24le(e, 0x2F),
                 "size": struct.unpack_from(">I", e, 0x34)[0],
+                "parent": struct.unpack_from(">H", e, 0x32)[0],
+                "index": o // 0x40,
             }
+
+def extract_all(s, outdir):
+    entries = {e["index"]: e for e in s.entries()}
+    def rel(e):
+        parts = [e["name"]]
+        while e["parent"] != 0xFFFF:
+            e = entries[e["parent"]]
+            parts.append(e["name"])
+        return os.path.join(*reversed(parts))
+    count = 0
+    for e in entries.values():
+        path = os.path.join(outdir, rel(e))
+        if e["dir"]:
+            os.makedirs(path, exist_ok=True)
+            continue
+        if not e["consecutive"]:
+            raise SystemExit(f"{rel(e)}: fragmented file, not supported")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as o:
+            o.write(s.read_blocks(e["start"], e["blocks"], e["size"]))
+        count += 1
+    print(f"extracted {count} files to {outdir}")
 
 def main():
     pkg, outdir, names = sys.argv[1], sys.argv[2], [n.lower() for n in sys.argv[3:]]
     s = Stfs(pkg)
+    if names == ["--all"]:
+        return extract_all(s, outdir)
     for e in s.entries():
         print(f"{'<DIR>' if e['dir'] else e['size']:>10}  {e['name']}")
         if e["dir"] or e["name"].lower() not in names:

@@ -1,10 +1,17 @@
-// wwe2k17 - ReXGlue Recompiled Project
-//
-// Customize your app by overriding virtual hooks from rex::ReXApp.
+// wwe2k17 - WWE 2K17 (Xbox 360) static recompilation with the stock ReXGlue SDK v0.10.1.
 
 #pragma once
 
+#include <filesystem>
+#include <memory>
+#include <system_error>
+
+#include <rex/filesystem.h>
+#include <rex/filesystem/devices/host_path_device.h>
+#include <rex/filesystem/vfs.h>
+#include <rex/logging/macros.h>
 #include <rex/rex_app.h>
+#include <rex/system/kernel_state.h>
 
 class Wwe2k17App : public rex::ReXApp {
  public:
@@ -16,16 +23,33 @@ class Wwe2k17App : public rex::ReXApp {
         PPCImageConfig));
   }
 
-  // Override virtual hooks for customization:
-  // void OnPostInitLogging() override {}
-  // void OnPreSetup(rex::RuntimeConfig& config) override {}
-  // void OnLoadXexImage(std::string& xex_image) override {}
-  // void OnPostLoadXexImage() override {}
-  // void OnPostSetup() override {}
-  // void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {}
-  // std::unique_ptr<rex::ui::ImGuiDialog> CreateAchievementsOverlay() override;
-  // std::unique_ptr<rex::ui::AchievementNotificationDialog>
-  // CreateAchievementNotificationDialog() override;
-  // void OnShutdown() override {}
-  // void OnConfigurePaths(rex::PathConfig& paths) override {}
+  void OnConfigurePaths(rex::PathConfig& paths) override {
+    user_data_root_ = paths.user_data_root;
+  }
+
+  // The title opens its Xbox HDD cache (cache:\) at boot and waits on it. The stock SDK mounts no cache
+  // drive (WWE 2K16 PC added one to its SDK), so mount userdata\xbox_cache there, as 2K16 does.
+  void OnPostSetup() override {
+    if (user_data_root_.empty()) return;
+    const auto cache_root = user_data_root_ / "xbox_cache";
+    std::error_code ec;
+    std::filesystem::create_directories(cache_root, ec);
+    if (ec) {
+      REXLOG_ERROR("Unable to create Xbox cache folder {}: {}", cache_root.string(), ec.message());
+      return;
+    }
+    auto* fs = REX_KERNEL_FS();
+    auto device = std::make_unique<rex::filesystem::HostPathDevice>("\\CACHE", cache_root, false);
+    if (!fs || !device->Initialize() || !fs->RegisterDevice(std::move(device))) {
+      REXLOG_ERROR("Unable to mount Xbox cache folder {}", cache_root.string());
+      return;
+    }
+    fs->RegisterSymbolicLink("cache:", "\\CACHE");
+    fs->RegisterSymbolicLink("cache0:", "\\CACHE");
+    fs->RegisterSymbolicLink("cache1:", "\\CACHE");
+    REXLOG_INFO("Xbox cache mounted at {}", cache_root.string());
+  }
+
+ private:
+  std::filesystem::path user_data_root_;
 };

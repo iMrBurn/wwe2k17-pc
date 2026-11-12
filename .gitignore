@@ -21,3 +21,9 @@ tu0000*
 *.log
 *.dmp
 CMakeUserPresets.json
+/userdata/
+
+launcher/bin/
+launcher/obj/
+launcher/dist/
+*.exe
