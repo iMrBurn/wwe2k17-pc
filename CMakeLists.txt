@@ -21,4 +21,4 @@ else()
     add_executable(wwe2k17 ${WWE2K17_SOURCES})
 endif()
 
-rexglue_setup_target(wwe2k17)
+rexglue_setup_target(wwe2k17 GPU_PLUGINS xenos)

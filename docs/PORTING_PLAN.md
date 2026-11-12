@@ -13,7 +13,8 @@ on the stock ReXGlue v0.10.1 release.
 ## Open work
 
 - [x] Project created with `rexglue init`, codegen from the TU2 image passes.
-- [ ] First build of `wwe2k17.exe` and boot to the logos.
+- [x] First build of `wwe2k17.exe`.
+- [ ] Boot to the logos.
 - [ ] setjmp / longjmp addresses (2K16 needed them for libjpeg error paths).
 - [ ] TU2 `pac/` overlay and DLC mounting.
 - [ ] Port from 2K15 / 2K16: launcher, crash reports, framerate hook, keyboard, native renderer.
@@ -25,3 +26,6 @@ on the stock ReXGlue v0.10.1 release.
 - First codegen: "XEX patch applied successfully" (0.0.0.1 -> 0.0.2.1), then 3 UnresolvedCall
   targets reached only by `b` tail calls (0x82DE01CC, 0x826CC0E0, 0x8309C808), added to
   `config/functions.toml`. Second codegen: 591 files written in 97 s.
+- First build (Clang 23.1.3, `win-amd64-release`, 300 steps): links cleanly, `wwe2k17.exe` 104 MB.
+  `rexglue init` leaves out the GPU plugin: `rexglue_setup_target(wwe2k17 GPU_PLUGINS xenos)`, as in
+  2K15, so `rexgpu-xenos.dll` lands next to the exe. The SDK now lives in the repo's ignored `sdk/`.
