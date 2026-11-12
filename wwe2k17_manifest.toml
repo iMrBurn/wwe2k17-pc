@@ -1,5 +1,5 @@
 # ReXGlue v0.10.1 manifest. Like WWE 2K15 PC and WWE 2K16 PC, the code is generated from the
-# title-update-patched image only (WWE 2K17 Title Update 2): game_tu/ holds your disc's default.xex
+# title-update-patched image only (WWE 2K17 Title Update 1.04, the last one: image 0.0.4.1): game_tu/ holds your disc's default.xex
 # with the update's default.xexp beside it (tools\setup.ps1 prepares it).
 
 [project]

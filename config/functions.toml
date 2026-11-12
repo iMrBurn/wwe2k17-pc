@@ -1,8 +1,8 @@
-# Extra function entry points the recompiler misses (WWE 2K17 + Title Update 2).
+# Extra function entry points the recompiler misses (WWE 2K17 + Title Update 1.04, image 0.0.4.1).
 
 [functions]
 
 # First codegen: UnresolvedCall targets reached only by a `b` tail call. Sizes left to the scanner.
-0x82DE01CC = { name = "wwe2k17tu_tail_82DE01CC" }   # b from 0x82DE0208
-0x826CC0E0 = { name = "wwe2k17tu_tail_826CC0E0" }   # b from 0x826108DC
-0x8309C808 = { name = "wwe2k17tu_tail_8309C808" }   # b from 0x8309C9C4
+0x826E3558 = { name = "wwe2k17tu_tail_826E3558" }   # b from 0x8262714C
+0x830CA7D0 = { name = "wwe2k17tu_tail_830CA7D0" }   # b from 0x830CA98C
+0x82E0E38C = { name = "wwe2k17tu_tail_82E0E38C" }   # b from 0x82E0E3C8

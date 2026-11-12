@@ -50,7 +50,7 @@ void CleanFileName(uint8_t* name) {
 }
 }  // namespace
 
-// [[midasm_hook]] at 0x82B6084C (bl XamContentCreateEx): r4 = root name, r5 = XCONTENT_DATA*.
+// [[midasm_hook]] at 0x82B8E734 (TU 1.04; 0x82B6084C in TU2) (bl XamContentCreateEx): r4 = root name, r5 = XCONTENT_DATA*.
 void Wwe2k17ContentNameHook(PPCRegister& r4, PPCRegister& r5) {
   auto* memory = REX_KERNEL_MEMORY();
   uint32_t slot;

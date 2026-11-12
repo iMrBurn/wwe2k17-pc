@@ -19,7 +19,7 @@ try {
         cmd /c "`"$rexglue`" codegen wwe2k17_manifest.toml > `"$log`" 2>&1"
         if ($LASTEXITCODE -ne 0) { Get-Content $log -Tail 20; throw "codegen failed, see $log" }
         if (-not (Select-String -Path $log -Pattern "XEX patch applied successfully" -Quiet)) {
-            throw "Title Update 2 did not apply to your default.xex (see $log)"
+            throw "Title Update 1.04 did not apply to your default.xex (see $log)"
         }
     }
     Invoke-Checked cmake --preset $Preset "-DCMAKE_PREFIX_PATH=$Sdk"

@@ -1,9 +1,9 @@
 # Download the prebuilt ReXGlue SDK release into sdk\ and prepare YOUR game files:
 #   tools\setup.ps1 -Iso "D:\WWE 2K17.iso" -TitleUpdate "D:\tu00000001_00000000"
 # Writes (all ignored by Git):
-#   game\                    the whole disc, plus Title Update 2's default.xexp beside default.xex
+#   game\                    the whole disc, plus Title Update 1.04's default.xexp beside default.xex
 #                            (the loader applies the update only when the patch sits there)
-#   userdata\title_update\   the whole Title Update 2 (the game reads its pac files through update:\)
+#   userdata\title_update\   the whole Title Update 1.04 (the game reads its pac files through update:\)
 #   game_tu\                 default.xex + default.xexp, the codegen input
 param([string]$Iso = "", [string]$TitleUpdate = "")
 $ErrorActionPreference = "Stop"

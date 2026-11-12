@@ -75,3 +75,14 @@ The game reaches its menus (One on One match type list). What it took, in order:
 - Result: 2+ minutes without a crash, the attract-mode demo match renders correctly (Kevin Owens vs Sami Zayn,
   referee, crowd), title screen shows version 1.02, then the save warning screen. A played match from the
   menus is still to test (stopped: WWE '12 was open at the same time and the key script sends global keys).
+
+### Title Update 1.04 (2026-11-12, night)
+
+- In game, the Future Stars and Hall of Fame DLC said "requires a more recent version of the game" on TU2
+  (1.02). The Xbox 360 got a later update, 1.04 (prepares Hall of Fame Showcase): package
+  `tu00000001_00000000`, 109,420,544 bytes, image 0.0.4.1. Aurora's cached TU list only knew TU1/TU2.
+- Same procedure as for TU2: 3 tail-call targets (0x826E3558, 0x830CA7D0, 0x82E0E38C), 209 pointer-only
+  functions, setjmp 0x831ED470 / longjmp 0x831ED150, 237 thunks (import stubs from 0x83380E2C).
+  Hooks moved: ranged physical alloc 0x822516F0, XamContentCreateEx 0x82B8E734.
+- Result: 2+ minutes, all 6 DLC opened, RAW arena entrance renders. DLC message not re-checked yet (needs
+  the menus).

@@ -18,7 +18,7 @@ namespace {
 std::atomic<int> g_logged{0};
 }
 
-// [[midasm_hook]] at 0x82241770 (bl MmAllocatePhysicalMemoryEx in the game's physical allocator):
+// [[midasm_hook]] at 0x822516F0 (TU 1.04; 0x82241770 in TU2) (bl MmAllocatePhysicalMemoryEx in the game's physical allocator):
 // r3 flags, r4 size, r5 protect, r6 min_addr_range, r7 max_addr_range, r8 alignment.
 void Wwe2k17RangedPhysicalAllocHook(PPCRegister& r6, PPCRegister& r7) {
   const uint32_t min = r6.u32, max = r7.u32;

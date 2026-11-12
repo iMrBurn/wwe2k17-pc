@@ -3,11 +3,11 @@
 # src/memory_hooks.cpp: ranged physical allocations, Yuke's engine (2K15/2K16 patched the SDK for it).
 [[midasm_hook]]
 name = "Wwe2k17RangedPhysicalAllocHook"
-address = 0x82241770
+address = 0x822516F0
 registers = ["r6", "r7"]
 
 # src/content_hooks.cpp: clean the 42-byte content file name (stale bytes crash the SDK's UTF-8 paths).
 [[midasm_hook]]
 name = "Wwe2k17ContentNameHook"
-address = 0x82B6084C
+address = 0x82B8E734
 registers = ["r4", "r5"]

@@ -2,15 +2,15 @@
 
 Unofficial native Windows x64 port of **WWE 2K17 (Xbox 360)**, made by statically recompiling the game's PowerPC code with [ReXGlue](https://github.com/rexglue/rexglue-sdk) v0.10.1. Last game of a series: [WWE '12 PC](https://github.com/iMrBurn/wwe12-pc), [WWE 2K15 PC](https://github.com/iMrBurn/wwe2k15-pc), [WWE 2K16 PC](https://github.com/iMrBurn/wwe2k16-pc).
 
-**This repository contains project code and documentation only. No game data is included or linked.** You need your own copy of the Xbox 360 game and its Title Update 2. Please do not ask for game files in the issues.
+**This repository contains project code and documentation only. No game data is included or linked.** You need your own copy of the Xbox 360 game and its Title Update 1.04. Please do not ask for game files in the issues.
 
-> **Status: early work in progress.** The game (with Title Update 2 and DLC) boots, plays its demo match and reaches the save screen. A match from the menus is not tested yet. No release.
+> **Status: early work in progress.** The game (with Title Update 1.04 and DLC) boots, plays its demo match and reaches the save screen. A match from the menus is not tested yet. No release.
 
 ## Building
 
 Needs Windows 10/11 x64, Visual Studio 2022 (C++ workload), LLVM/Clang 20+, CMake 3.25+, Ninja and Python 3.
 
-1. Get the SDK and prepare your game files (your own disc image and Title Update 2 package, `tu00000001_00000000`):
+1. Get the SDK and prepare your game files (your own disc image and Title Update 1.04 package, `tu00000001_00000000`, 109 MB; the older 28 MB TU2 is not enough for the Future Stars and Hall of Fame DLC):
 
    ```powershell
    tools\setup.ps1 -Iso "D:\WWE 2K17.iso" -TitleUpdate "D:\tu00000001_00000000"
@@ -33,7 +33,7 @@ DLC: copy your own WWE 2K17 DLC packages into `userdata\dlc_inbox\`; the game in
 
 ## Layout
 
-- `wwe2k17_manifest.toml`: ReXGlue project (code generated from the Title Update 2 image).
+- `wwe2k17_manifest.toml`: ReXGlue project (code generated from the Title Update 1.04 image).
 - `config/`: function entry points and hooks the recompiler needs.
 - `src/`: the host app.
 - `tools/`: setup and build scripts, `xiso_get.py` (reads an Xbox 360 ISO), `stfs_extract.py` (reads a title update package).

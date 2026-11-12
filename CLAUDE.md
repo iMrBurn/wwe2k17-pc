@@ -13,8 +13,8 @@ Code, commits and docs in English. Commit as `iMrBurn <267004884+iMrBurn@users.n
 - No game data in Git or in any package: no xex/xexp, iso, .pac, sound, textures, `generated/`,
   Title Update or DLC, and no download links for them.
 - Ask before any download. Never touch Windows security settings.
-- Never modify the user's original files (`Desktop\WWE ISOS\...`, the TU2 zip in Downloads).
-  Work copies: `game_tu/` (default.xex + default.xexp), `..\tu2\` (unzipped Title Update 2).
+- Never modify the user's original files (`Desktop\WWE ISOS\...`, `Desktop\tu00000001_00000000` = TU 1.04, the TU2 zip in Downloads).
+  Work copies: `game_tu/` (default.xex + default.xexp), `..\tu4\` (default.xexp of TU 1.04), `..\tu2\` (old TU2, unused).
 - Ask before launching the game when the user may be using the PC.
 
 ## Build and run
@@ -28,3 +28,6 @@ Code, commits and docs in English. Commit as `iMrBurn <267004884+iMrBurn@users.n
   `src/*_hooks.cpp`) and `Wwe2k17App` overrides (`src/wwe2k17_app.h`). Runtime settings:
   `wwe2k17_runtime.toml` (copied as `wwe2k17.toml` next to the exe; `gpu_plugin = "xenos"` is required).
 - `tools\capture_window.ps1 -Out logs\shot.png` saves an image of the game window.
+- Switching title update: redo setup, codegen with only config/functions.toml, then find_functions + make_fptrs,
+  scan_thunks (import stub start = lowest __imp__ in wwe2k17_init.cpp), and move the [[midasm_hook]] addresses
+  (find the call sites in generated code). See docs/PORTING_PLAN.md 'Title Update 1.04'.
