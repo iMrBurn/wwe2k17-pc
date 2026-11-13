@@ -283,3 +283,23 @@ Before that, the port has no loading numbers at all: `GetFileIoStats` is stubbed
 (`src/native/wwe2k17_native_stubs.cpp`), which is why every `[load]` line says "read 0.0 MB in 0 calls". WWE 2K15 PC
 has an SDK patch for it (`rexglue-sdk-iostats.patch`); applying it to `patches/sdk` would give real read volumes and
 times, and that is the step to take before optimising loading.
+
+### First match actually played (2026-11-13, by the user)
+
+A 9-minute session on `wwe2k17_native.exe` (Vulkan, 1920x1080): menus navigated, a full match played with entrances,
+EXIT menu used. The user's verdict: "plutot propre" and the quit menu works. No FATAL, no crash.
+
+What this verified that no amount of attract-mode testing could:
+- The EXIT menu port works on screen, not just in the log: string 35178 patched, the Xbox Live offline notice
+  suppressed (string 30041), "quit confirmation shown" and the game closed from it.
+- The 60 FPS hook fires and holds: three scenes kept at 60 instead of 30, 22.1 s, 21.7 s and 15.8 s long
+  (two entrances and a victory scene). The automatic fallback never triggered, so this PC holds 60 in them.
+- A match runs at 59.2-59.9 fps.
+
+What it also exposed, and the attract loop never did: **shader stutter at the entrance**. 63 pipelines were compiled
+on the render thread during the session, 55 of them in the twenty seconds of the first entrance, and that is exactly
+where the two freezes are: 1448 ms and 798 ms, plus a window with 34 frames over 25 ms. Those pipelines were not in
+`pipelines.bin` because no one had ever played a match: the file only held what the attract loop needs. It grew from
+29,500 to 39,328 bytes during the session, so the next run should build them at startup instead (e73b139). That is
+the measurement I could not make earlier and it should be made now: play the same match again and count the
+"render-thread compile (miss, not in residual)" lines and the freezes.
