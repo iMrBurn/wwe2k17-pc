@@ -15,6 +15,8 @@
 #include <rex/ppc/context.h>
 #include <rex/ppc/function.h>
 
+#include "gpu/cpu_zones.h"  // kGuestD3D: time in the game's own D3D functions
+
 namespace svr {
 
 // WWE 2K16 bring-up switch (cvar svr_hooks_off, native/wwe2k17_native_stubs.cpp): a comma list of
@@ -55,7 +57,7 @@ inline void CopyArgs(PPCContext &dst, const PPCContext &src) {
   extern "C" REX_FUNC(subroutine) {                              \
     PPCContext svr_args;                                         \
     ::svr::CopyArgs(svr_args, ctx);                              \
-    __imp__##subroutine(ctx, base);                              \
+    { WWE12_CPU_ZONE(kGuestD3D); __imp__##subroutine(ctx, base); } \
     static const bool svr_on = ::svr::HookEnabled(#subroutine);  \
     if (svr_on)                                                  \
       rex::ppc::HostToGuestFunction<function>(svr_args, base);   \
@@ -70,7 +72,7 @@ inline void CopyArgs(PPCContext &dst, const PPCContext &src) {
     static const bool svr_on = ::svr::HookEnabled(#subroutine);  \
     if (svr_on)                                                  \
       rex::ppc::HostToGuestFunction<function>(svr_args, base);   \
-    __imp__##subroutine(ctx, base);                              \
+    { WWE12_CPU_ZONE(kGuestD3D); __imp__##subroutine(ctx, base); } \
   }
 
 // The game's function, then the renderer's with the arguments and the game's return value (r3).
@@ -79,7 +81,7 @@ inline void CopyArgs(PPCContext &dst, const PPCContext &src) {
   extern "C" REX_FUNC(subroutine) {                              \
     PPCContext svr_args;                                         \
     ::svr::CopyArgs(svr_args, ctx);                              \
-    __imp__##subroutine(ctx, base);                              \
+    { WWE12_CPU_ZONE(kGuestD3D); __imp__##subroutine(ctx, base); } \
     static const bool svr_on = ::svr::HookEnabled(#subroutine);  \
     if (svr_on)                                                  \
       function(svr_args, ctx.r3.u32, base);                      \

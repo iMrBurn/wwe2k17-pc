@@ -229,3 +229,31 @@ The user confirmed the movie is smooth now. Vulkan, D3D12 and D3D11 all boot and
 picture changes 32-38 times a second in all three (the measuring script tops out around 33-40 captures a second, so
 that is its ceiling, not the game's). `svr_texture_refill = false` restores the old behaviour if a texture is ever
 seen holding stale contents.
+
+### CPU: dynamic geometry (2026-11-13)
+
+WWE '12 PC's geometry work since our base was never taken: commits 3b6048c (dynamic geometry copied without a full
+hash, hashed every 8 frames to catch it settling, settled after 60 frames instead of 300, and the game's own D3D
+bodies timed inside our hooks) and 20676db (`svr_geometry_sample_min`, and the [perf] line now says how much of the
+hashing is in buffers under 32 KiB) replayed on `src/reblue` and `src/native`. One conflict, `svr_hook.h`: kept our
+`svr_hooks_off` switch and added their WWE12_CPU_ZONE(kGuestD3D) around the game's D3D body.
+
+Measured on the attract demo match (two wrestlers, referee, crowd), same scene before and after:
+
+| | before | after |
+|---|---|---|
+| render-thread work per frame (RTX 5070) | 8.0-12.5 ms | 5.0-5.3 ms |
+| frames over 25 ms, per 600 | 1-4 | 0 |
+| geometry hashed per frame | 2.33 MB | 1.77 MB (1.74 of it in buffers under 32 KiB) |
+| Intel iGPU + 2 CPU threads | 30.0 fps | 46-52 fps |
+
+The 2-thread case is now render-thread bound (work 18-21 ms per frame). Hashing itself is not the cost left: 1.74 MB
+at xxHash speed is about 0.2 ms, so the win came from the copies and compares 3b6048c removes, not from hashing less.
+Lowering `svr_geometry_sample_min` would buy ~0.2 ms and risks missing a change: left at 32 KiB.
+The picture was checked on the demo match and the menus: no geometry or texture corruption.
+
+Not taken yet from WWE '12 PC (they touch `svr_resources.cpp`, where 2K16 and WWE '12 diverged and a full merge gave
+12 conflicts): e73b139 (remembered pipelines built at startup, shader stutters), c615578 (read-backs of a streak
+become one copy at frame end, match start on weak GPUs), d1084cc / f8a431d / 6b9cb26 (turbo loading and fast boot),
+6bef73b (adaptive V-sync). The render-thread split in the [perf] line is still Android-only here (WWE '12 enabled it
+on PC in 31e4c93): worth taking before optimising the 2-thread case further.
