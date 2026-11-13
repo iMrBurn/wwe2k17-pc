@@ -17,9 +17,31 @@ public sealed class GameSetup
     public string GameFolder => Path.Combine(_root, "game");
     public string UpdateFolder => Path.Combine(_root, "userdata", "title_update");
 
+    // The engine is recompiled from the game with Title Update 1.04 (image 0.0.4.1): its default.xexp. Other
+    // updates (TU2 = 1.02) patch different code, so the engine would run the wrong image.
+    const string ExpectedXexpSha256 = "A144CBE9A842841B86AD0E99F3C0A88F9F30561231CF6A6E525040CAA513840D";
+
+    public enum UpdateState { Missing, Wrong, Ok }
+
     public bool HasGame => File.Exists(Path.Combine(GameFolder, "default.xex"));
     public bool HasTitleUpdate =>
         File.Exists(Path.Combine(UpdateFolder, "default.xexp")) && File.Exists(Path.Combine(GameFolder, "default.xexp"));
+
+    public UpdateState CheckUpdate()
+    {
+        string patch = Path.Combine(UpdateFolder, "default.xexp");
+        string beside = Path.Combine(GameFolder, "default.xexp");
+        if (!File.Exists(patch) || !File.Exists(beside)) return UpdateState.Missing;
+        try
+        {
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            using var a = File.OpenRead(patch);
+            using var b = File.OpenRead(beside);
+            string ha = Convert.ToHexString(sha.ComputeHash(a)), hb = Convert.ToHexString(sha.ComputeHash(b));
+            return ha == ExpectedXexpSha256 && hb == ExpectedXexpSha256 ? UpdateState.Ok : UpdateState.Wrong;
+        }
+        catch (IOException) { return UpdateState.Wrong; }
+    }
 
     // Extracts an Xbox 360 disc image into game\ (about 8.7 GB, a few minutes).
     public void InstallIso(string iso, Action<long, long> progress, CancellationToken cancel)
@@ -62,7 +84,7 @@ public sealed class GameSetup
         ApplyUpdateExecutable();
     }
 
-    // Unpacks the Title Update 2 package (tu00000001_00000000). Returns its display name.
+    // Unpacks the Title Update package (tu00000001_00000000, version 1.04). Returns its display name.
     public string InstallTitleUpdate(string package, Action<long, long> progress)
     {
         using var pkg = StfsPackage.Open(package);

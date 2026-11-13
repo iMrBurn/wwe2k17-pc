@@ -25,7 +25,17 @@ public class LauncherSettings
     public bool Vibration { get; set; } = true;
     public bool Mute { get; set; } = false;
     public string Extra { get; set; } = "";
+    // Graphics engine: native = re:Blue renderer on Vulkan, d3d12 / d3d11 = native on Direct3D, xenos = GPU emulation.
+    public string Engine { get; set; } = "native";
+    public int Internal { get; set; } = 0;     // native renderer: internal height (svr_render_scale), 0 = auto
+    public int Aa { get; set; } = 0;           // native renderer: edge smoothing 0 off, 1 on, 2 strong (svr_fxaa)
+    public bool Upscaler { get; set; } = false;
+    public bool Fps60 { get; set; } = true;    // wwe2k17_60fps
+    public bool Shadows { get; set; } = true;  // wwe2k17_shadows
+    public string Gpu { get; set; } = "";      // native renderer: Vulkan name of the GPU, "" = automatic
 }
+
+record Engine(string Id, string Name, string Exe, bool Native, string Info);
 
 public partial class MainWindow : Window
 {
@@ -37,11 +47,26 @@ public partial class MainWindow : Window
         ("english", "ENGLISH", 1), ("french", "FRANÇAIS", 4), ("german", "DEUTSCH", 3),
         ("spanish", "ESPAÑOL", 5), ("italian", "ITALIANO", 6),
     };
+    static readonly Engine[] Engines =
+    {
+        new("native", "NATIF · VULKAN", "wwe2k17_native.exe", true, "Rendu natif Vulkan : le plus rapide et le plus complet (recommandé)."),
+        new("d3d12", "NATIF · DIRECT3D 12", "wwe2k17_d3d12.exe", true, "Rendu natif Direct3D 12 : essaie-le si Vulkan pose problème avec ta carte."),
+        new("d3d11", "NATIF · DIRECT3D 11", "wwe2k17_d3d11.exe", true, "Rendu natif Direct3D 11 : pour les vieilles cartes graphiques."),
+        new("xenos", "ÉMULATION XENOS", "wwe2k17.exe", false, "Émulation de la puce de la Xbox 360 : plus lente, sert de référence."),
+    };
+    // Internal heights of the native renderer (svr_render_scale); 0 = automatic from the screen and the GPU.
+    static readonly int[] InternalHeights = { 0, 540, 720, 1080, 1440, 2160 };
+    static readonly string[] AaNames = { "NON", "OUI", "FORT" };
     static string OnOff(bool b) => b ? "OUI" : "NON";
+    List<string> gpuNames = new();
+
+    Engine CurrentEngine => Engines.FirstOrDefault(e => e.Id == cfg.Engine) ?? Engines[0];
+    string EnginePath(Engine e) => Path.Combine(exeDir, e.Exe);
+    IEnumerable<Engine> AvailableEngines => Engines.Where(e => File.Exists(EnginePath(e)));
     static Brush Hex(string h) => (Brush)new BrushConverter().ConvertFromString(h)!;
     static Color HexC(string h) => (Color)ColorConverter.ConvertFromString(h);
 
-    string root = "", exe = "", settingsPath = "";
+    string root = "", exeDir = "", settingsPath = "";
     string? currentLog;
     LauncherSettings cfg = new();
     Process? proc;
@@ -63,7 +88,9 @@ public partial class MainWindow : Window
         public Func<string>? Get;
         public bool IsText;
         public Func<bool> Enabled = () => true;
+        public Brush? ValueColor;   // fixed colour for the value (diagnostic rows)
     }
+    GameSetup.UpdateState updateState;
     readonly List<Item> items = new();
     readonly Dictionary<string, int> selByScreen = new();
     string screen = "main";
@@ -89,7 +116,7 @@ public partial class MainWindow : Window
         CompositionTarget.Rendering += OnFrame;
 
         var ver = Path.Combine(root, "VERSION");
-        VersionText.Text = "LAUNCHER 0.4" + (File.Exists(ver) ? "  ·  PORT " + File.ReadAllText(ver).Trim().ToUpperInvariant() : "");
+        VersionText.Text = "LAUNCHER 0.5" + (File.Exists(ver) ? "  ·  PORT " + File.ReadAllText(ver).Trim().ToUpperInvariant() : "");
 
         var tick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         tick.Tick += (_, _) => TailLog();
@@ -97,22 +124,27 @@ public partial class MainWindow : Window
 
         loading = false;
         RefreshChecks();
+        LoadGpuNames();
         Loaded += (_, _) => { Focus(); ShowScreen("main"); };
     }
 
     // ---- paths / settings / optional artwork ---------------------------------
     void FindRoot()
     {
+        // Development: the launcher runs from inside the repository, the engines are in out\build\win-amd64-release.
+        // Portable: the engines sit next to the launcher.
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         for (int i = 0; i < 6 && dir != null; i++, dir = dir.Parent)
         {
-            var a = Path.Combine(dir.FullName, "out", "build", "win-amd64-release", "wwe2k17.exe");
-            var b = Path.Combine(dir.FullName, "wwe2k17.exe");
-            if (File.Exists(a)) { root = dir.FullName; exe = a; return; }
-            if (File.Exists(b)) { root = dir.FullName; exe = b; return; }
+            foreach (var e in Engines)
+            {
+                var a = Path.Combine(dir.FullName, "out", "build", "win-amd64-release");
+                if (File.Exists(Path.Combine(a, e.Exe))) { root = dir.FullName; exeDir = a; return; }
+                if (File.Exists(Path.Combine(dir.FullName, e.Exe))) { root = dir.FullName; exeDir = dir.FullName; return; }
+            }
         }
         root = AppContext.BaseDirectory;
-        exe = Path.Combine(root, "wwe2k17.exe");
+        exeDir = root;
     }
 
     void LoadSettings()
@@ -128,6 +160,11 @@ public partial class MainWindow : Window
         if (!Languages.Any(l => l.Key == cfg.Language)) cfg.Language = "english";
         cfg.Scale = Math.Clamp(cfg.Scale, 1, 3);
         cfg.Aniso = Math.Clamp(cfg.Aniso, -1, 5);
+        cfg.Aa = Math.Clamp(cfg.Aa, 0, 2);
+        if (!InternalHeights.Contains(cfg.Internal)) cfg.Internal = 0;
+        // an engine that isn't built here can't be the choice: fall back to the first one that is
+        if (!Engines.Any(e => e.Id == cfg.Engine && File.Exists(EnginePath(e))))
+            cfg.Engine = AvailableEngines.FirstOrDefault()?.Id ?? "native";
     }
 
     void SaveSettings()
@@ -199,11 +236,13 @@ public partial class MainWindow : Window
         return item;
     }
 
-    void Back() => Add("RETOUR", "Revenir au menu principal.", () => ShowScreen("main"));
+    // Where Échap / RETOUR goes from each screen.
+    static string ParentOf(string s) => s is "display" or "graphics" or "gameopts" ? "settings" : "main";
+
+    void Back() => Add("RETOUR", "Revenir à l'écran précédent.", () => ShowScreen(ParentOf(screen)));
 
     void ShowScreen(string name)
     {
-        if (busy && name != screen && screen != "main") { /* keep the screen the job started from */ }
         selByScreen[screen] = sel;
         screen = name;
         items.Clear();
@@ -213,8 +252,12 @@ public partial class MainWindow : Window
         switch (name)
         {
             case "settings": BuildSettings(); ScreenTitle.Text = "PARAMÈTRES"; break;
+            case "display": BuildDisplay(); ScreenTitle.Text = "AFFICHAGE"; break;
+            case "graphics": BuildGraphics(); ScreenTitle.Text = "GRAPHISMES"; break;
+            case "gameopts": BuildGameOptions(); ScreenTitle.Text = "JEU"; break;
             case "files": BuildFiles(); ScreenTitle.Text = "FICHIERS DU JEU"; break;
             case "dlc": BuildDlc(); ScreenTitle.Text = "CONTENU TÉLÉCHARGEABLE"; break;
+            case "diag": BuildDiag(); ScreenTitle.Text = "DIAGNOSTIC"; break;
             default: BuildMain(); ScreenTitle.Text = "MENU PRINCIPAL"; break;
         }
         Select(selByScreen.TryGetValue(name, out var s) ? s : 0);
@@ -228,13 +271,22 @@ public partial class MainWindow : Window
     {
         Add("JOUER", "Lance WWE 2K17 avec tes paramètres.", Play, enabled: () => (hasExe && setup.HasGame && !busy) || proc != null)
             .Label.Text = proc != null ? "ARRÊTER LE JEU" : "JOUER";
-        Add("PARAMÈTRES", "Affichage, résolution, langue, son et manette.", () => ShowScreen("settings"));
-        Add("FICHIERS DU JEU", "Installe le jeu depuis ton ISO, ajoute le Title Update 2, ouvre les dossiers.", () => ShowScreen("files"));
+        Add("PARAMÈTRES", "Affichage, graphismes, langue, son et manette.", () => ShowScreen("settings"));
+        Add("FICHIERS DU JEU", "Installe le jeu depuis ton ISO, ajoute le Title Update 1.04, ouvre les dossiers.", () => ShowScreen("files"));
         Add("DLC", "Ajoute ou retire les contenus téléchargeables (DLC).", () => ShowScreen("dlc"));
+        Add("DIAGNOSTIC", "Vérifie que tout est en place et copie un rapport à joindre en cas de problème.", () => ShowScreen("diag"));
         Add("QUITTER", "Ferme le launcher.", Close);
     }
 
     void BuildSettings()
+    {
+        Add("AFFICHAGE", "Fenêtré ou plein écran, résolution de la fenêtre, V-Sync, carte graphique.", () => ShowScreen("display"));
+        Add("GRAPHISMES", "Moteur graphique, finesse du rendu, anticrénelage, filtrage, ombres.", () => ShowScreen("graphics"));
+        Add("JEU", "Langue, 60 images/s, vibration, son, options avancées.", () => ShowScreen("gameopts"));
+        Back();
+    }
+
+    void BuildDisplay()
     {
         Add("AFFICHAGE", "Fenêtré ou plein écran.", () => { }, () => cfg.Fullscreen ? "PLEIN ÉCRAN" : "FENÊTRÉ", _ => cfg.Fullscreen = !cfg.Fullscreen);
         Add("RÉSOLUTION", "Taille de la fenêtre du jeu (720p, 900p, 1080p, 1440p, 4K).", () => { }, () => cfg.Resolution.Replace("x", " × "), d =>
@@ -244,19 +296,84 @@ public partial class MainWindow : Window
         });
         Add("V-SYNC", "Synchronise l'image avec l'écran pour éviter les déchirures. Peut ajouter un peu de latence.", () => { },
             () => OnOff(cfg.VSync), _ => cfg.VSync = !cfg.VSync);
-        Add("RÉSOLUTION INTERNE", "Multiplie la finesse du rendu (1× = comme la Xbox 360). Plus haut = plus net mais plus lourd.", () => { },
-            () => cfg.Scale + "×", d => cfg.Scale = ((cfg.Scale - 1 + d + 3) % 3) + 1);
+        if (CurrentEngine.Native)
+        {
+            var choices = new List<string> { "" };
+            choices.AddRange(gpuNames);
+            if (cfg.Gpu.Length > 0 && !choices.Contains(cfg.Gpu)) choices.Add(cfg.Gpu);
+            Add("CARTE GRAPHIQUE", "AUTO choisit la plus puissante. Change-la si ton PC a deux cartes (portable) et que le jeu prend la mauvaise.", () => { },
+                () => cfg.Gpu.Length == 0 ? "AUTO" : cfg.Gpu.ToUpperInvariant(), d =>
+                {
+                    int i = Math.Max(0, choices.IndexOf(cfg.Gpu));
+                    cfg.Gpu = choices[(i + d + choices.Count) % choices.Count];
+                });
+        }
+        Back();
+    }
+
+    void BuildGraphics()
+    {
+        var avail = AvailableEngines.ToList();
+        Add("MOTEUR GRAPHIQUE", avail.Count == 0 ? "Aucun moteur compilé : lance tools\\build.ps1." : CurrentEngine.Info, () => { },
+            () => avail.Count == 0 ? "AUCUN" : CurrentEngine.Name, d =>
+            {
+                if (avail.Count == 0) return;
+                int i = Math.Max(0, avail.FindIndex(e => e.Id == cfg.Engine));
+                cfg.Engine = avail[(i + d + avail.Count) % avail.Count].Id;
+                SaveSettings();
+                Rebuild();           // the rows below depend on the engine
+            });
+        if (CurrentEngine.Native)
+        {
+            Add("RENDU INTERNE", "Finesse du rendu. AUTO adapte à ton écran et à ta carte. Plus haut = plus net mais plus lourd (540p/720p = cartes faibles).", () => { },
+                () => cfg.Internal == 0 ? "AUTO" : cfg.Internal + "p", d =>
+                {
+                    int i = Array.IndexOf(InternalHeights, cfg.Internal);
+                    cfg.Internal = InternalHeights[(i + d + InternalHeights.Length) % InternalHeights.Length];
+                });
+            Add("ANTICRÉNELAGE", "Adoucit les bords crénelés (FXAA).", () => { }, () => AaNames[cfg.Aa], d => cfg.Aa = (cfg.Aa + d + 3) % 3);
+            Add("MISE À L'ÉCHELLE", "Quand le rendu interne est plus petit que la fenêtre, l'agrandit avec un filtre plus net que le flou habituel.", () => { },
+                () => OnOff(cfg.Upscaler), _ => cfg.Upscaler = !cfg.Upscaler);
+        }
+        else
+        {
+            Add("RÉSOLUTION INTERNE", "Multiplie la finesse du rendu (1× = comme la Xbox 360). Plus haut = plus net mais plus lourd.", () => { },
+                () => cfg.Scale + "×", d => cfg.Scale = ((cfg.Scale - 1 + d + 3) % 3) + 1);
+        }
         Add("FILTRAGE ANISOTROPE", "Textures plus nettes vues de biais.", () => { },
             () => AnisoNames[cfg.Aniso + 1], d => cfg.Aniso = ((cfg.Aniso + 1 + d + AnisoNames.Length) % AnisoNames.Length) - 1);
+        Add("OMBRES DU RING", "Ombres sur le tapis. Désactive-les sur une carte graphique faible pour gagner des images.", () => { },
+            () => OnOff(cfg.Shadows), _ => cfg.Shadows = !cfg.Shadows);
+        Back();
+    }
+
+    void BuildGameOptions()
+    {
         Add("LANGUE DU JEU", "Langue des textes du jeu (le launcher reste en français).", () => { },
             () => Languages.First(l => l.Key == cfg.Language).Name, d =>
             {
                 int i = Array.FindIndex(Languages, l => l.Key == cfg.Language);
                 cfg.Language = Languages[(i + d + Languages.Length) % Languages.Length].Key;
             });
+        Add("60 IMAGES/S", "Entrées, victoires, rediffusions et cinématiques à 60 images/s au lieu de 30 comme sur Xbox 360.", () => { },
+            () => OnOff(cfg.Fps60), _ => cfg.Fps60 = !cfg.Fps60);
         Add("VIBRATION", "Vibration de la manette.", () => { }, () => OnOff(cfg.Vibration), _ => cfg.Vibration = !cfg.Vibration);
         Add("COUPER LE SON", "Lance le jeu sans son.", () => { }, () => OnOff(cfg.Mute), _ => cfg.Mute = !cfg.Mute);
         Add("OPTIONS AVANCÉES", "Arguments en plus pour le jeu (facultatif). Entrée pour écrire, Échap pour finir.", () => { }, text: true);
+        Back();
+    }
+
+    // Read-only checks plus a report to paste in a bug report.
+    void BuildDiag()
+    {
+        foreach (var (label, value, ok, info) in DiagLines())
+        {
+            var it = Add(label, info, () => { }, () => value);
+            it.Bar.Cursor = Cursors.Arrow;
+            it.ValueColor = Hex(ok ? "#3DDC84" : "#FF5A6B");
+        }
+        Add("COPIER LE RAPPORT", "Copie un rapport complet (versions, fichiers, dernières lignes du journal) à coller dans un message.", CopyReport);
+        Add("OUVRIR LE DERNIER JOURNAL", "Ouvre le dernier fichier log dans le Bloc-notes.", OpenLastLog);
         Back();
     }
 
@@ -266,8 +383,13 @@ public partial class MainWindow : Window
             InstallIso, () => setup.HasGame ? "INSTALLÉ" : "À FAIRE", enabled: () => !busy);
         Add("INSTALLER DEPUIS UN DOSSIER", "Choisis le dossier du disque déjà extrait (celui qui contient default.xex) : il est copié dans game\\.",
             InstallFolder, enabled: () => !busy);
-        Add("INSTALLER LE TITLE UPDATE 2", "Choisis le fichier tu00000001_00000000 : le launcher l'extrait et l'applique au jeu.",
-            InstallTitleUpdate, () => setup.HasTitleUpdate ? "INSTALLÉ" : "À FAIRE", enabled: () => !busy);
+        Add("INSTALLER LE TITLE UPDATE 1.04", "Choisis le fichier tu00000001_00000000 (version 1.04, environ 109 Mo) : le launcher l'extrait et l'applique au jeu.",
+            InstallTitleUpdate, () => updateState switch
+            {
+                GameSetup.UpdateState.Ok => "1.04 INSTALLÉ",
+                GameSetup.UpdateState.Wrong => "MAUVAISE VERSION",
+                _ => "À FAIRE",
+            }, enabled: () => !busy);
         Add("OUVRIR LES SAUVEGARDES", "Ouvre le dossier des sauvegardes et données (userdata).", () => OpenDir("userdata"));
         Add("OUVRIR LES JOURNAUX", "Ouvre le dossier des logs : utile si le jeu plante.", () => OpenDir("logs"));
         Add("OUVRIR LE DOSSIER DU JEU", "Ouvre le dossier du projet dans l'explorateur.", () => OpenDir(""));
@@ -310,7 +432,7 @@ public partial class MainWindow : Window
         }
         var fg = Hex(on ? "#FFFFFF" : en ? "#DCDCE0" : "#6A6A70");
         it.Label.Foreground = fg;
-        it.Value.Foreground = fg;
+        it.Value.Foreground = on ? fg : (it.ValueColor ?? fg);
         if (it.IsText && extraBox != null) extraBox.Foreground = Brushes.White;
         if (it.Get != null)
             it.Value.Text = (on && it.Change != null ? "◄  " : "") + it.Get() + (on && it.Change != null ? "  ►" : "");
@@ -354,7 +476,7 @@ public partial class MainWindow : Window
             case Key.Enter or Key.Space: Activate(items[sel], 1); break;
             case Key.Escape:
                 if (busy) { jobCancel?.Cancel(); }
-                else if (screen != "main") ShowScreen("main");
+                else if (screen != "main") ShowScreen(ParentOf(screen));
                 break;
             default: return;
         }
@@ -365,15 +487,115 @@ public partial class MainWindow : Window
     void RefreshChecks()
     {
         Checks.Children.Clear();
-        hasExe = File.Exists(exe);
+        hasExe = File.Exists(EnginePath(CurrentEngine));
+        updateState = setup.CheckUpdate();
         AddCheck("MOTEUR", hasExe);
         AddCheck("DONNÉES DU JEU", setup.HasGame);
-        AddCheck("TITLE UPDATE 2", setup.HasTitleUpdate);
+        AddCheck("TITLE UPDATE 1.04", updateState == GameSetup.UpdateState.Ok);
         if (!busy)
         {
             if (!hasExe) StatusText.Text = "Le moteur n'est pas compilé : lance tools\\build.ps1.";
             else if (!setup.HasGame) StatusText.Text = "Le jeu n'est pas installé : va dans FICHIERS DU JEU.";
+            else if (updateState == GameSetup.UpdateState.Missing) StatusText.Text = "Il manque le Title Update 1.04 : va dans FICHIERS DU JEU.";
+            else if (updateState == GameSetup.UpdateState.Wrong)
+                StatusText.Text = "Ce n'est pas le Title Update 1.04 : le moteur est fait pour la 1.04, réinstalle-la dans FICHIERS DU JEU.";
         }
+    }
+
+    // ---- diagnostic ----------------------------------------------------------------------
+    IEnumerable<(string Label, string Value, bool Ok, string Info)> DiagLines()
+    {
+        int built = Engines.Count(e => File.Exists(EnginePath(e)));
+        yield return ("MOTEURS GRAPHIQUES", built + " / " + Engines.Length, File.Exists(EnginePath(CurrentEngine)),
+            "Moteurs compilés : " + string.Join(", ", Engines.Where(e => File.Exists(EnginePath(e))).Select(e => e.Name.ToLowerInvariant())) + ".");
+        yield return ("DONNÉES DU JEU", setup.HasGame ? "PRÉSENTES" : "ABSENTES", setup.HasGame, "Dossier game\\ avec default.xex.");
+        yield return ("TITLE UPDATE", updateState switch
+        {
+            GameSetup.UpdateState.Ok => "1.04",
+            GameSetup.UpdateState.Wrong => "MAUVAISE VERSION",
+            _ => "ABSENT",
+        }, updateState == GameSetup.UpdateState.Ok, "Le moteur est compilé pour la version 1.04 du Title Update.");
+        int dlcCount; try { dlcCount = dlc.List().Count; } catch { dlcCount = 0; }
+        yield return ("DLC INSTALLÉS", dlcCount + " / 6", true, "Les contenus téléchargeables installés dans userdata.");
+        long freeGb = 0;
+        try { freeGb = new DriveInfo(Path.GetPathRoot(root)!).AvailableFreeSpace >> 30; } catch { }
+        double ramGb = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1073741824.0;
+        yield return ("PC", $"{ramGb:0.#} GO RAM · {freeGb} GO LIBRES", ramGb >= 7.5 && freeGb >= 5,
+            "Mémoire vive (8 Go minimum conseillés) et place libre sur le disque du jeu (les caches de shaders grossissent).");
+        yield return ("CARTE GRAPHIQUE", gpuNames.Count == 0 ? "?" : gpuNames[0].ToUpperInvariant(), gpuNames.Count > 0,
+            gpuNames.Count > 1 ? "Cartes vues : " + string.Join(", ", gpuNames) : "Carte détectée par Windows.");
+    }
+
+    string BuildReport()
+    {
+        var sb = new System.Text.StringBuilder();
+        string ver = File.Exists(Path.Combine(root, "VERSION")) ? File.ReadAllText(Path.Combine(root, "VERSION")).Trim() : "?";
+        sb.AppendLine($"WWE 2K17 PC {ver} · launcher 0.5 · {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine($"Windows {Environment.OSVersion.Version} · {Environment.ProcessorCount} threads");
+        foreach (var (label, value, _, _) in DiagLines()) sb.AppendLine($"{label}: {value}");
+        foreach (var e in Engines) sb.AppendLine($"  {e.Exe}: {(File.Exists(EnginePath(e)) ? "présent" : "absent")}{(e.Id == cfg.Engine ? " (choisi)" : "")}");
+        sb.AppendLine($"Réglages: moteur {cfg.Engine}, {cfg.Resolution}, plein écran {cfg.Fullscreen}, V-Sync {cfg.VSync}, " +
+                      $"interne {(CurrentEngine.Native ? (cfg.Internal == 0 ? "auto" : cfg.Internal + "p") : cfg.Scale + "x")}, AA {cfg.Aa}, " +
+                      $"upscaler {cfg.Upscaler}, aniso {cfg.Aniso}, 60 ips {cfg.Fps60}, ombres {cfg.Shadows}, langue {cfg.Language}, gpu '{cfg.Gpu}'");
+        var log = LastLog();
+        if (log != null)
+        {
+            sb.AppendLine($"--- {Path.GetFileName(log)} (dernières lignes) ---");
+            try
+            {
+                using var fs = new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                int n = (int)Math.Min(fs.Length, 6000);
+                fs.Seek(-n, SeekOrigin.End);
+                var buf = new byte[n];
+                int read = fs.Read(buf, 0, n);
+                var lines = System.Text.Encoding.UTF8.GetString(buf, 0, read).Split('\n', StringSplitOptions.TrimEntries);
+                foreach (var l in lines.TakeLast(25)) sb.AppendLine(l);
+            }
+            catch (IOException) { }
+        }
+        return sb.ToString();
+    }
+
+    string? LastLog()
+    {
+        var d = Path.Combine(root, "logs");
+        return Directory.Exists(d)
+            ? new DirectoryInfo(d).EnumerateFiles("run-*.log").OrderByDescending(f => f.LastWriteTime).FirstOrDefault()?.FullName
+            : null;
+    }
+
+    void CopyReport()
+    {
+        try { Clipboard.SetText(BuildReport()); StatusText.Text = "Rapport copié : colle-le dans ton message."; }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or InvalidOperationException)
+        { StatusText.Text = "Impossible de copier : " + ex.Message; }
+    }
+
+    void OpenLastLog()
+    {
+        var log = LastLog();
+        if (log == null) { StatusText.Text = "Aucun journal pour l'instant : lance le jeu une fois."; return; }
+        Process.Start(new ProcessStartInfo("notepad.exe", $"\"{log}\"") { UseShellExecute = true });
+    }
+
+    // GPU names as Windows reports them (the native renderer matches them against Vulkan's device names).
+    async void LoadGpuNames()
+    {
+        try
+        {
+            var names = await Task.Run(() =>
+            {
+                var psi = new ProcessStartInfo("powershell.exe",
+                    "-NoProfile -NonInteractive -Command \"(Get-CimInstance Win32_VideoController).Name\"")
+                { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
+                using var p = Process.Start(psi)!;
+                string text = p.StandardOutput.ReadToEnd();
+                p.WaitForExit(8000);
+                return text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToList();
+            });
+            gpuNames = names;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException) { }
     }
 
     void AddCheck(string name, bool ok)
@@ -513,22 +735,50 @@ public partial class MainWindow : Window
         Directory.CreateDirectory(Path.Combine(root, "userdata"));
         currentLog = Path.Combine(root, "logs", $"run-{DateTime.Now:yyyyMMdd-HHmmss}.log");
 
-        var psi = new ProcessStartInfo(exe) { WorkingDirectory = root, UseShellExecute = false };
+        var engine = CurrentEngine;
+        var psi = new ProcessStartInfo(EnginePath(engine)) { WorkingDirectory = root, UseShellExecute = false };
         void A(string s) => psi.ArgumentList.Add(s);
+        string B(bool v) => v ? "true" : "false";
+        // shared by every engine
         A("--game_data_root=" + Path.Combine(root, "game"));
         A("--user_data_root=" + Path.Combine(root, "userdata"));
         A("--update_data_root=" + Path.Combine(root, "userdata", "title_update"));
-        A("--fullscreen=" + (cfg.Fullscreen ? "true" : "false"));
+        A("--cache_root=" + Path.Combine(root, "userdata", "cache"));
+        A("--fullscreen=" + B(cfg.Fullscreen));
         A("--window_width=" + res[0]);
         A("--window_height=" + res[1]);
         A("--log_file=" + currentLog);
-        A("--gpu_vsync=" + (cfg.VSync ? "true" : "false"));
-        if (cfg.Scale > 1) A("--resolution_scale=" + cfg.Scale);
-        if (cfg.Aniso >= 0) A("--anisotropic_override=" + cfg.Aniso);
         A("--user_language=" + Languages.First(l => l.Key == cfg.Language).Id);
-        A("--vibration=" + (cfg.Vibration ? "true" : "false"));
+        A("--vibration=" + B(cfg.Vibration));
+        A("--wwe2k17_60fps=" + B(cfg.Fps60));
+        A("--wwe2k17_shadows=" + B(cfg.Shadows));
         if (cfg.Mute) A("--audio_mute=true");
+        if (engine.Native)
+        {
+            // re:Blue renderer: its own options (the Xenos ones don't exist there)
+            A("--bd_vsync=" + B(cfg.VSync));
+            if (cfg.Internal > 0) A("--svr_render_scale=" + cfg.Internal);
+            A("--svr_fxaa=" + cfg.Aa);
+            A("--svr_upscaler=" + (cfg.Upscaler ? 1 : 0));
+            if (cfg.Aniso >= 0) A("--bd_anisotropy=" + (cfg.Aniso == 0 ? 0 : 1 << (cfg.Aniso - 1)));
+            if (cfg.Gpu.Length > 0) A("--svr_gpu_device=" + cfg.Gpu);
+        }
+        else
+        {
+            A("--gpu_vsync=" + B(cfg.VSync));
+            if (cfg.Scale > 1) A("--resolution_scale=" + cfg.Scale);
+            if (cfg.Aniso >= 0) A("--anisotropic_override=" + cfg.Aniso);
+        }
         foreach (var extra in cfg.Extra.Split(' ', StringSplitOptions.RemoveEmptyEntries)) A(extra);
+
+        // Test hook: write the command line to this file instead of starting the game.
+        var dry = Environment.GetEnvironmentVariable("WWE2K17_LAUNCHER_DRYRUN");
+        if (!string.IsNullOrEmpty(dry))
+        {
+            File.WriteAllLines(dry, new[] { psi.FileName }.Concat(psi.ArgumentList));
+            StatusText.Text = "Essai : ligne de commande écrite, le jeu n'est pas lancé.";
+            return;
+        }
 
         try
         {
@@ -543,7 +793,7 @@ public partial class MainWindow : Window
                 proc = null;
                 StatusText.Text = code == 0
                     ? $"Jeu fermé normalement ({span:mm\\:ss})."
-                    : $"Le jeu s'est arrêté (code {code}) après {span:mm\\:ss}. Regarde les journaux.";
+                    : $"Le jeu s'est arrêté (code {code}) après {span:mm\\:ss}. Va dans DIAGNOSTIC pour copier un rapport ou ouvrir le journal.";
                 Rebuild();
             });
             StatusText.Text = $"Jeu lancé (PID {p.Id}). Bon match !";
