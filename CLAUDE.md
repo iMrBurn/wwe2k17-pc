@@ -12,6 +12,9 @@ Code, commits and docs in English. Commit as `iMrBurn <267004884+iMrBurn@users.n
 ## Hard rules
 - No game data in Git or in any package: no xex/xexp, iso, .pac, sound, textures, `generated/`,
   Title Update or DLC, and no download links for them.
+  Exception decided by the user on 2026-11-13: like WWE '12 PC, the D3D12 / D3D11 native exes carry the game's
+  shaders converted at build time (DXIL / DXBC inside the exe). Never put them in Git; the Vulkan exe still converts
+  them on the player's PC.
 - Ask before any download. Never touch Windows security settings.
 - Never modify the user's original files (`Desktop\WWE ISOS\...`, `Desktop\tu00000001_00000000` = TU 1.04, the TU2 zip in Downloads).
   Work copies: `game_tu/` (default.xex + default.xexp), `..\tu4\` (default.xexp of TU 1.04), `..\tu2\` (old TU2, unused).

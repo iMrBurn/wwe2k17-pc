@@ -393,10 +393,36 @@ void Wwe2k17WaitShader(bd::gpu::GuestShader *shader, uint32_t timeout_ms) {
             shader->shaderCacheEntry ? "ready" : "not ready, skipped");
 }
 
+// tools\dump_shaders.ps1: with --wwe2k17_dump_shaders=<folder>, every container this cache is asked to convert is also
+// written there as <hash>.vs.xsc / <hash>.ps.xsc, the input of XenosRecomp for the D3D12 / D3D11 builds (WWE '12 PC
+// extracts them from its .pac files; 2K17's are XCTD-compressed, and the game creates all its shaders at boot anyway).
+// Delete cache\native_shaders.bin first, or the shaders already converted never come here.
+REXCVAR_DEFINE_STRING(wwe2k17_dump_shaders, "", "WWE2K17",
+                      "Folder to write the game's shader containers to (for the D3D12/D3D11 builds)");
+
+static void DumpContainer(uint64_t hash, const uint8_t *container, uint32_t size) {
+  const std::string dir = REXCVAR_GET(wwe2k17_dump_shaders);
+  if (dir.empty())
+    return;
+  const bool vertex = (container[3] & 1) != 0;
+  char name[48];
+  snprintf(name, sizeof(name), "%016llX.%s.xsc", static_cast<unsigned long long>(hash), vertex ? "vs" : "ps");
+  std::error_code ec;
+  std::filesystem::create_directories(dir, ec);
+  const std::filesystem::path path = std::filesystem::path(dir) / name;
+  if (std::filesystem::exists(path, ec))
+    return;
+  if (FILE *f = _wfopen(path.c_str(), L"wb")) {
+    fwrite(container, 1, size, f);
+    fclose(f);
+  }
+}
+
 void Wwe2k17RequestShader(uint64_t hash, const uint8_t *container, uint32_t size,
                           bd::gpu::GuestShader *shader) {
   if (!container || size < 0x24 || size > (1u << 20))
     return;
+  DumpContainer(hash, container, size);
   {
     std::lock_guard lock(g_jobs_mutex);
     if (g_failed.count(hash))
