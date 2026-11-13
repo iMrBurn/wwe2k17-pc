@@ -5,7 +5,7 @@ keeps each function's mnemonic sequence, and for every reference function asked 
 functions in an address window by difflib similarity. Used to move the native renderer's D3D hook table
 (src/native/wwe2k17_d3d_names.h) from WWE 2K16 to 2K17.
 
-usage: match_functions.py <ref generated dir> <this generated dir> <lo hex> <hi hex> <names.h of the ref>
+usage: match_functions.py <ref generated dir> <this generated dir> <lo hex> <hi hex> <names.h of the ref | NAME=ADDR,...>
 """
 import difflib
 import glob
@@ -38,10 +38,15 @@ def load(gen_dir, lo, hi):
 def main():
     ref_dir, this_dir, lo, hi, names_h = sys.argv[1], sys.argv[2], int(sys.argv[3], 16), int(sys.argv[4], 16), sys.argv[5]
     names = []
-    for line in open(names_h, encoding="utf-8", errors="replace"):
-        m = re.match(r"#define\s+(D3D\w+)\s+sub_([0-9A-F]{8})", line)
-        if m:
-            names.append((m.group(1), int(m.group(2), 16)))
+    if "=" in names_h:  # NAME=ADDR,NAME=ADDR on the command line
+        for item in names_h.split(","):
+            n, a = item.split("=")
+            names.append((n, int(a.replace("sub_", ""), 16)))
+    else:
+        for line in open(names_h, encoding="utf-8", errors="replace"):
+            m = re.match(r"#define\s+(D3D\w+)\s+sub_([0-9A-F]{8})", line)
+            if m:
+                names.append((m.group(1), int(m.group(2), 16)))
     ref_lo = min(a for _, a in names) - 0x10000
     ref_hi = max(a for _, a in names) + 0x10000
     ref = load(ref_dir, ref_lo, ref_hi)

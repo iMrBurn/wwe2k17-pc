@@ -157,3 +157,19 @@ The game reaches its menus (One on One match type list). What it took, in order:
   built when generated/native/shader_cache.cpp exists.
 - Results on the RTX 5070 (attire demo matches, no keys sent): D3D12 12_2, Cesaro vs The Miz, 60.0 fps, 100 s; D3D11
   11_1, Balor vs Joe, 59.4-59.9 fps, 100 s; wwe2k17_native.exe (Vulkan) rechecked after the converter change.
+
+## 2026-11-13: fixes from WWE 2K15 / 2K16 PC
+
+- 60 FPS scenes (`src/framerate_hooks.cpp`, from 2K16 PC's framerate_hook.cpp + 2K15 PC's automatic fallback): 2K16's
+  60->30 / 30->60 switches found by instruction similarity, both 1.00 (sub_82A94AA8, sub_82A94B48; 2K16 sub_82B23E80 /
+  sub_82B23F20), timing block 0x837C4710 (lis/addi of both). Skipping the switch to 30 keeps the engine's time step
+  at 60; a scene that cannot hold 60 (2 x 90 frames over 26 ms) goes back to 30 for the session. Cvars
+  wwe2k17_60fps, wwe2k17_60fps_auto, wwe2k17_60fps_auto_ms. Not seen firing yet: the attract demos have no entrance.
+- PC texts (`src/text_hooks.cpp`, 2K15 PC's text_hook.cpp): "incorrect header check" at 0x82076718 is used by
+  sub_82B5D9B8 (zlib 1.2 inflate shape, hooked) and sub_82BEB2B0 (a library's zlib 1.1 inflate, left alone).
+  First run: 27 "Xbox 360" mentions changed at load. Cvar wwe2k17_pc_texts.
+- `REX_LOAD_U32` is gone in SDK v0.10.1: `LoadGuestU32(base, addr)` helpers.
+- Not ported: 2K15's job hand-off order fix (no function with its shape in 2K17, even with any offsets: written
+  differently or fixed; it only matters on 2-4 thread CPUs), 2K16's NULL memset guard (best match 0.86 only, no crash
+  seen), 2K15's crash guards and finisher camera cuts (need 2K15's generated code, not on this PC), 2K16's shadow
+  toggle and EXIT menu.

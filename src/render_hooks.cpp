@@ -112,8 +112,12 @@ extern "C" REX_FUNC(sub_82BB0C18) {
 
 // Once per guest present: pacing log every 5 s. Called by the Swap hook below (wwe2k17.exe) or by the native renderer
 // for each presented frame (wwe2k17_native.exe, src/native/wwe2k17_native_stubs.cpp: re:Blue owns Swap there).
+uint64_t Wwe2k17NowUs() { return NowUs(); }
+void Wwe2k17FramerateOnPresent(uint64_t now_us);  // framerate_hooks.cpp
+
 void Wwe2k17PacingOnPresent() {
   const uint64_t now = NowUs();
+  Wwe2k17FramerateOnPresent(now);
   PaceStats& p = g_pace;
   if (!p.window_start) {
     p.window_start = p.last = now;
