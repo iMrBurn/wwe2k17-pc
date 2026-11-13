@@ -42,6 +42,10 @@ void SvrWatchdogHeartbeat();
 bool SvrDisplaySize(uint32_t &w, uint32_t &h);
 bool SvrOnSteamDeck();
 
+REXCVAR_DEFINE_BOOL(svr_texture_full_hash, false, "SvR",
+                    "Hash every texture in full on each frame it is used, instead of a sampled hash for "
+                    "those of 16 KB and more (diagnostic: catches plane updates the sampling misses)");
+
 REXCVAR_DEFINE_BOOL(svr_release_stale_targets, true, "SvR",
                     "Free host render targets the game no longer uses (false: keep them, the "
                     "0.6.0 behaviour, which leaks video memory).");
@@ -1159,6 +1163,13 @@ std::atomic<u64> g_mirror_builds{0}, g_mirror_build_ns{0};  // texture mirrors (
 // every kFullHashFrames frames, so a change between the samples shows after a second at worst.
 constexpr size_t kSampledHashMin = 16 * 1024;
 constexpr u64 kFullHashFrames = 60;
+
+// WWE 2K17: the intro movies judder and show ghost images (user report, 2026-11-13). A Bink frame is
+// several plane textures; when the sampled hash misses one plane's change, that plane keeps the
+// previous frame while the others move on. svr_texture_full_hash = true hashes every texture in full
+// on every frame it is used (the behaviour the sampling replaced), to measure how many changes the
+// sampling misses: the "[load] textures N" count per second rises by exactly those.
+bool TextureFullHash() { return REXCVAR_GET(svr_texture_full_hash); }
 u64 SampleHash(const NativeMirrorSource &src) {
   u64 hash = XXH3_64bits(src.fetch, sizeof(src.fetch));
   const auto slices = [&hash](const u8 *data, size_t size, size_t count) {
@@ -1340,7 +1351,7 @@ GuestTexture *SvrResolveTexture(u32 texture_va) {
     return TargetWithSameMemory(texture_va);
   }
   u64 sample = 0;
-  if (src.base_size + src.mips_size >= kSampledHashMin) {
+  if (!TextureFullHash() && src.base_size + src.mips_size >= kSampledHashMin) {
     sample = SampleHash(src);
     if (check.frame != 0 && check.sample == sample && frame - check.full_frame < kFullHashFrames) {
       g_texture_sampled.fetch_add(1, std::memory_order_relaxed);

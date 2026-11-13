@@ -19,6 +19,9 @@ set(WWE2K17_SOURCES
     src/render_hooks.cpp
     src/framerate_hooks.cpp
     src/text_hooks.cpp
+    src/shadows.cpp
+    src/test_input.cpp
+    src/exit_menu.cpp
 )
 
 if(WIN32)

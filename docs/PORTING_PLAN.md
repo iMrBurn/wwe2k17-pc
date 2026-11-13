@@ -173,3 +173,35 @@ The game reaches its menus (One on One match type list). What it took, in order:
   differently or fixed; it only matters on 2-4 thread CPUs), 2K16's NULL memset guard (best match 0.86 only, no crash
   seen), 2K15's crash guards and finisher camera cuts (need 2K15's generated code, not on this PC), 2K16's shadow
   toggle and EXIT menu.
+
+### Shadows option, EXIT menu, scripted input (2026-11-13)
+
+- `src/shadows.cpp`: the ring mat plane shadow pass (sub_82ACF100, 2K16 TU3 sub_82B5F7F0, similarity 1.00 with the
+  same 2,764 instructions) can be skipped with `wwe2k17_shadows = false` (weak graphics chips).
+- `src/exit_menu.cpp`: WWE 2K16 PC's EXIT menu ported. String 35178 ("WWE SHOP", same ID in 2K17) becomes EXIT and
+  swaps with OPTIONS so it is last; the Xbox Live entry (35243) and its offline notice (30041) are removed; EXIT opens
+  the game's Yes/No dialog and closes the window. The 12 functions were matched by instruction similarity (1.00 for
+  most; CheckMenuItemVisible 0.95 and ResolveMenuAction 0.79, arguments checked by hand); the sentinel descriptor is
+  menu_obj + 11480 (2K16: 11472) and the DialogManager global 0x8379A62C, both read from the matched code. 2K16's
+  SetupMenuSlot brightness override is left out (its slot layout differs, 0.85). Seen in the log: string 35178
+  patched. Off with `wwe2k17_exit_menu = false`. The menu itself is not navigated yet.
+- `src/test_input.cpp`, `src/script_input.h`: WWE 2K16 PC's scripted controller (WWE2K17_TEST_INPUT=1, commands in
+  logs\test_input.txt), plus XInputGetKeystroke events, which 2K17's "Press Start" screen reads instead of the button
+  state. `tools/send_keys.ps1` posts keys to the game window only (safe while another game is in use).
+
+### Movies: judder and ghost images (user report 2026-11-13, not fixed yet)
+
+Measured on the user's screen recording of the intro (`game/movies/menu/WWE17_OPEN.bk2`) and the matching log:
+- Presentation is perfect: 60.0 fps, max gap 19.5 ms, 0 hitches, GPU wait 0 %.
+- The renderer uploads ~100 texture mirrors a second during the movie, costing 135-147 ms of render-thread CPU each
+  second; render-thread work is 11.8-13.7 ms per 16.7 ms frame. A Bink frame is 3 k_8 planes (Y/cR/cB, see
+  native_texture_mirror.cpp), so ~100/s = ~33 movie frames a second: the decode rate is right.
+- In the recording the picture changes only ~20 times a second, in an irregular rhythm (runs of 3 and 7 changed
+  frames separated by repeats): that is the judder.
+- Root cause found in `GetOrCreateNativeMirror`: a mirror whose source changed is **evicted and recreated** (the old
+  GPU texture goes to the pending-destroy list). For a movie that is 90 GPU texture creations and destructions a
+  second instead of 90 content updates into the same textures.
+- Ruled out: the 60 FPS hook (never fired in that run), the sampled hash (`svr_texture_full_hash`, added as a
+  diagnostic, shows the sampling is not missing plane updates), presentation pacing.
+- The doubled face on some shots is at least partly the video's own double-exposure style: the Xenos emulation build
+  shows the same look on the Cena shot. To confirm once the judder is fixed.

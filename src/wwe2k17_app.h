@@ -20,8 +20,12 @@
 #include <rex/filesystem/devices/host_path_device.h>
 #include <rex/filesystem/vfs.h>
 #include <rex/logging/macros.h>
+#include <rex/input/input_system.h>
 #include <rex/rex_app.h>
+#include <rex/runtime.h>
 #include <rex/system/gpu_plugin.h>
+
+#include "script_input.h"
 #include <rex/system/kernel_state.h>
 
 #if defined(_WIN32)
@@ -195,6 +199,13 @@ class Wwe2k17App : public rex::ReXApp {
   // The title opens its Xbox HDD cache (cache:\) at boot and waits on it. The stock SDK mounts no cache
   // drive (WWE 2K16 PC added one to its SDK), so mount userdata\xbox_cache there, as 2K16 does.
   void OnPostSetup() override {
+    // Scripted controller for automated tests (script_input.h, from WWE 2K16 PC): WWE2K17_TEST_INPUT=1, commands in
+    // logs\test_input.txt. Works without the window having focus.
+    if (wwe2k17::ScriptInputDriver::Enabled() && runtime() && runtime()->input_system()) {
+      static_cast<rex::input::InputSystem*>(runtime()->input_system())
+          ->AddDriver(std::make_unique<wwe2k17::ScriptInputDriver>(nullptr));
+      REXLOG_INFO("[wwe2k17] scripted input on (logs/test_input.txt)");
+    }
     if (user_data_root_.empty()) return;
     const auto cache_root = user_data_root_ / "xbox_cache";
     std::error_code ec;
