@@ -257,3 +257,29 @@ Not taken yet from WWE '12 PC (they touch `svr_resources.cpp`, where 2K16 and WW
 become one copy at frame end, match start on weak GPUs), d1084cc / f8a431d / 6b9cb26 (turbo loading and fast boot),
 6bef73b (adaptive V-sync). The render-thread split in the [perf] line is still Android-only here (WWE '12 enabled it
 on PC in 31e4c93): worth taking before optimising the 2-thread case further.
+
+### Shader stutters: remembered pipelines built at startup (2026-11-13)
+
+WWE '12 PC's e73b139 replayed on `src/reblue` and `src/native` (one conflict, `svr_resources.h`: kept our
+`SvrResolveTexture(u32)` signature, since the `check_every_use` argument comes from aaf6b78 which we did not take,
+and added their `SvrPrecreateReplayObjects`). The pipelines remembered in `userdata/cache/pipelines.bin` now have
+their shaders and vertex declarations made at startup in the background instead of in the draw that first needs them.
+In the log: "recorder: 189 pipeline(s) loaded", "boot: 123 shader(s) and 0 vertex declaration(s) made at startup
+(12 declaration(s) not known yet), 1 ms".
+
+Honest result: this moves the cost rather than removing it, and that is the point. The first run with a
+`pipelines.bin` to replay showed more hitches in the first 30 s (3, 3, 2 per 600 frames, max 48-68 ms) than runs with
+no file to replay (1, 0, 0) and none after that. I could not show the gain it is meant to buy: a fast PC builds those
+pipelines on demand without a visible stutter, and the weak-configuration comparison was invalid (the run happened to
+sit on the title screen, not in the demo match). Kept because it is the trade WWE '12 PC made for real shader
+stutters, it costs 1 ms of startup work, and the demo match and menus render correctly.
+
+### Loading times: not portable from WWE '12 PC
+
+`wwe12_load_turbo.cpp` is 619 lines hooking WWE '12's own code (its frame barrier sub_827DEA20, its loader
+sub_82819258, its resource-name builder sub_825B85B8, its replay-phase global 0x8317B7BC). Fast boot
+(`wwe12_intros.cpp`) is the same. Porting them means finding each of those in 2K17 first, a job of its own.
+Before that, the port has no loading numbers at all: `GetFileIoStats` is stubbed to zero here
+(`src/native/wwe2k17_native_stubs.cpp`), which is why every `[load]` line says "read 0.0 MB in 0 calls". WWE 2K15 PC
+has an SDK patch for it (`rexglue-sdk-iostats.patch`); applying it to `patches/sdk` would give real read volumes and
+times, and that is the step to take before optimising loading.

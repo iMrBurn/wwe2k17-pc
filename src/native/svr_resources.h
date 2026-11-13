@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include <rex/types.h>
 
 namespace bd::gpu {
@@ -31,6 +33,11 @@ GuestTexture *SvrResolveTarget(u32 texture_va, float scale = 0.0f);
 void SvrAfterResolve(u32 texture_va, GuestTexture *dst, u32 level, u32 face);
 // Guest texture bound for sampling -> host texture (a resolve target, else a mirror).
 GuestTexture *SvrResolveTexture(u32 texture_va);
+// Startup: makes the shaders (by shader cache hash) and vertex declarations (by element hash, from
+// the kept declarations) that the remembered pipelines wait for, so they build in the background.
+void SvrPrecreateReplayObjects(const std::vector<u64> &vertex_shaders,
+                               const std::vector<u64> &pixel_shaders,
+                               const std::vector<u64> &declarations);
 // Called once per presented frame (mirror checks are per frame).
 void SvrOnFrame();
 
