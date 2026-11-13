@@ -5,9 +5,12 @@ param([switch]$NoCodegen, [string]$Preset = "win-amd64-release")
 $ErrorActionPreference = "Stop"
 $Root = Split-Path $PSScriptRoot
 . (Join-Path $PSScriptRoot "env.ps1")
-$Sdk = Join-Path $Root "sdk\rexglue-sdk-0.10.1\win-amd64"
+# The SDK built from source by tools\build-sdk.ps1 (Vulkan, null GPU) when present, else the prebuilt release.
+$Sdk = Join-Path $Root "sdk\rexglue-install"
+if (-not (Test-Path "$Sdk\bin\rexglue.exe")) { $Sdk = Join-Path $Root "sdk\rexglue-sdk-0.10.1\win-amd64" }
 $rexglue = "$Sdk\bin\rexglue.exe"
-if (-not (Test-Path $rexglue)) { throw "ReXGlue SDK missing: run tools\setup.ps1 first" }
+if (-not (Test-Path $rexglue)) { throw "ReXGlue SDK missing: run tools\build-sdk.ps1 (or tools\setup.ps1) first" }
+Write-Host "SDK: $Sdk"
 if (-not (Test-Path "$Root\game_tu\default.xexp")) { throw "game_tu\ is not ready: run tools\setup.ps1 -Iso ... -TitleUpdate ..." }
 
 Push-Location $Root

@@ -34,7 +34,9 @@ REXCVAR_DEFINE_BOOL(wwe2k17_render_wait_yield, true, "WWE2K17",
                     "Let the render thread sleep briefly while waiting for the GPU ring");
 
 REX_EXTERN(__imp__sub_82BB0C18);
+#if !defined(SVR_NATIVE_RENDERER)
 REX_EXTERN(__imp__sub_82BB2488);
+#endif
 
 namespace {
 
@@ -108,8 +110,9 @@ extern "C" REX_FUNC(sub_82BB0C18) {
   }
 }
 
-// D3DDevice_Swap: pacing log every 5 s.
-extern "C" REX_FUNC(sub_82BB2488) {
+// Once per guest present: pacing log every 5 s. Called by the Swap hook below (wwe2k17.exe) or by the native renderer
+// for each presented frame (wwe2k17_native.exe, src/native/wwe2k17_native_stubs.cpp: re:Blue owns Swap there).
+void Wwe2k17PacingOnPresent() {
   const uint64_t now = NowUs();
   PaceStats& p = g_pace;
   if (!p.window_start) {
@@ -129,5 +132,12 @@ extern "C" REX_FUNC(sub_82BB2488) {
       p.wait_at_start = g_gpu_wait_us.load();
     }
   }
+}
+
+#if !defined(SVR_NATIVE_RENDERER)
+// D3DDevice_Swap.
+extern "C" REX_FUNC(sub_82BB2488) {
+  Wwe2k17PacingOnPresent();
   __imp__sub_82BB2488(ctx, base);
 }
+#endif

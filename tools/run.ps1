@@ -2,7 +2,9 @@
 #   game\              your extracted disc (tools\setup.ps1 -Iso ... -Full)
 #   userdata\title_update\  your extracted Title Update 2 (tools\setup.ps1 -TitleUpdate ...)
 $Root = Split-Path $PSScriptRoot
-$exe = "$Root\out\build\win-amd64-release\wwe2k17.exe"
+# WWE2K17_EXE=wwe2k17_native picks the native renderer build (default: wwe2k17, the Xenos GPU emulation).
+$name = if ($env:WWE2K17_EXE) { $env:WWE2K17_EXE } else { "wwe2k17" }
+$exe = "$Root\out\build\win-amd64-release\$name.exe"
 if (-not (Test-Path $exe)) { throw "wwe2k17.exe missing: run tools\build.ps1 first" }
 New-Item -ItemType Directory -Force "$Root\logs", "$Root\userdata" | Out-Null
 $log = "$Root\logs\run-$(Get-Date -Format yyyyMMdd-HHmmss).log"

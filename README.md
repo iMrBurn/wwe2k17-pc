@@ -4,11 +4,17 @@ Unofficial native Windows x64 port of **WWE 2K17 (Xbox 360)**, made by staticall
 
 **This repository contains project code and documentation only. No game data is included or linked.** You need your own copy of the Xbox 360 game and its Title Update 1.04. Please do not ask for game files in the issues.
 
-> **Status: early work in progress.** The game (with Title Update 1.04 and DLC) boots, plays its demo match and reaches the save screen. A match from the menus is not tested yet. No release.
+> **Status: early work in progress.** Two builds: `wwe2k17_native.exe` (native renderer, Vulkan: the attract demo match runs at 60 fps) and `wwe2k17.exe` (Xbox GPU emulation, Vulkan). A match from the menus is not tested yet. No release.
 
 ## Building
 
 Needs Windows 10/11 x64, Visual Studio 2022 (C++ workload), LLVM/Clang 20+, CMake 3.25+, Ninja and Python 3.
+
+0. Build the ReXGlue SDK v0.10.1 from source with this project's patches (Vulkan, null GPU; downloads the SDK source the first time):
+
+   ```powershell
+   tools\build-sdk.ps1
+   ```
 
 1. Get the SDK and prepare your game files (your own disc image and Title Update 1.04 package, `tu00000001_00000000`, 109 MB; the older 28 MB TU2 is not enough for the Future Stars and Hall of Fame DLC):
 

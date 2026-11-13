@@ -29,3 +29,4 @@ launcher/dist/
 *.exe
 launcher_art/
 __pycache__/
+/native-deps/

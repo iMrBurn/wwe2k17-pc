@@ -21,7 +21,24 @@
 #include <rex/filesystem/vfs.h>
 #include <rex/logging/macros.h>
 #include <rex/rex_app.h>
+#include <rex/system/gpu_plugin.h>
 #include <rex/system/kernel_state.h>
+
+#if defined(_WIN32)
+#include <timeapi.h>
+#pragma comment(lib, "winmm.lib")
+#endif
+
+#if defined(SVR_NATIVE_RENDERER)
+// Native renderer (wwe2k17_native.exe only, cmake/native_renderer.cmake): re:Blue draws through plume (Vulkan) from the
+// game's own D3D calls instead of emulating the Xenos GPU.
+#include "gpu/device.h"
+#include "gpu/imgui_overlay_drawer.h"
+#include "gpu/shaders/shader_cache.h"
+#endif
+
+REXCVAR_DEFINE_STRING(wwe2k17_gpu_backend, "vulkan", "WWE2K17",
+                      "GPU emulation backend of wwe2k17.exe: vulkan, d3d12 or any (D3D12 hangs in the first 3D scene)");
 
 class Wwe2k17App : public rex::ReXApp {
  public:
@@ -33,11 +50,114 @@ class Wwe2k17App : public rex::ReXApp {
         PPCImageConfig));
   }
 
+  void OnPreSetup(rex::RuntimeConfig& config) override {
+#if defined(_WIN32)
+    // The GPU command processor waits with Sleep(1 ms); at the default ~15.6 ms timer tick every wait costs a whole tick.
+    timeBeginPeriod(1);
+#endif
+    PickDiscreteD3D12Adapter();
+    if (config.graphics) return;
+#if defined(SVR_NATIVE_RENDERER)
+    // The Xenos plugin's "null" backend (patches/sdk/0001-null-gpu.patch) keeps the game's D3D command stream moving
+    // (fences, interrupts, vblank) without drawing; the re:Blue hooks draw instead.
+    config.graphics = rex::system::LoadGpuPlugin("xenos", "null");
+    REXLOG_INFO("Native renderer: guest GPU {}", config.graphics ? "null (sync only)" : "MISSING");
+#else
+    // Vulkan first: the D3D12 backend hangs the GPU (DEVICE_HUNG) when the first 3D scene loads, as in WWE 2K15/2K16.
+    const std::string backend = REXCVAR_GET(wwe2k17_gpu_backend);
+    config.graphics = rex::system::LoadGpuPlugin("xenos", backend);
+    if (!config.graphics && backend != "any") {
+      REXLOG_WARN("GPU backend '{}' unavailable, trying any", backend);
+      config.graphics = rex::system::LoadGpuPlugin("xenos", "any");
+    }
+#endif
+  }
+
+#if defined(SVR_NATIVE_RENDERER)
+  // The plume device draws the ImGui overlays at Present time.
+  std::unique_ptr<rex::ui::ImmediateDrawer> OnCreateImmediateDrawer() override {
+    return std::make_unique<bd::gpu::ImGuiOverlayDrawer>();
+  }
+
+  void OnPreLaunchModule() override {
+    if (!bd::gpu::Video::CreateHostDevice(window())) {
+      // GPU or driver without the Vulkan 1.2 features re:Blue needs (bufferDeviceAddress, descriptor indexing...):
+      // device.cpp has logged which. Start the GPU-emulation build beside this exe instead (same command line).
+      REXLOG_ERROR("Native renderer: could not create the host device (Vulkan unavailable or too old)");
+      rex::FlushLogging();
+      RestartAs(L"wwe2k17.exe");
+      MessageBoxW(nullptr,
+                  L"The native renderer could not start: this graphics card or its driver lacks the Vulkan 1.2 "
+                  L"features it needs.\n\nUpdate the graphics driver.\n\nLe rendu natif n’a pas pu démarrer : "
+                  L"cette carte graphique ou son pilote n’a pas les fonctions Vulkan 1.2 nécessaires.\n\n"
+                  L"Mets à jour le pilote graphique.",
+                  L"WWE 2K17 PC", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+      std::_Exit(1);
+    }
+#if defined(WWE2K17_RUNTIME_SHADERS)
+    // Without a usable dxcompiler.dll no shader can be converted and the window stays black: fail cleanly.
+    if (!Wwe2k17DxcUsable()) {
+      REXLOG_ERROR("Native renderer: shader compiler (dxcompiler.dll) missing or unusable");
+      rex::FlushLogging();
+      MessageBoxW(nullptr,
+                  L"The native renderer could not start: dxcompiler.dll is missing or unusable (it must sit next to the "
+                  L"program).\n\nLe rendu natif n’a pas pu démarrer : dxcompiler.dll est absent ou "
+                  L"inutilisable (il doit être à côté du programme).",
+                  L"WWE 2K17 PC", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+      std::_Exit(1);
+    }
+#endif
+    // Present runs on the game thread and ImGui on the UI thread: draw the overlay synchronously on the UI thread into
+    // the presented image.
+    bd::gpu::Video::SetOverlayDrawHook([this](plume::RenderCommandList* cmd, plume::RenderFramebuffer* fb, uint32_t w,
+                                              uint32_t h) {
+      if (!imgui_drawer() || !imgui_drawer()->HasDialogs()) return;
+      app_context().CallInUIThreadSynchronous([this, cmd, fb, w, h] {
+        bd::gpu::ReblueUIDrawContext ctx(w, h, cmd, fb);
+        imgui_drawer()->Draw(ctx);
+      });
+    });
+  }
+
+  void OnWindowPixelSizeChanged(uint32_t, uint32_t) override { bd::gpu::Video::RequestResize(); }
+#endif
+
+ private:
+#if defined(_WIN32) && defined(SVR_NATIVE_RENDERER)
+  // Start another exe of this folder with this process's command line, then end this process (no return on success).
+  static void RestartAs(const wchar_t* exe_name) {
+    const std::filesystem::path other = rex::filesystem::GetExecutableFolder() / exe_name;
+    std::error_code ec;
+    wchar_t self[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, self, MAX_PATH);
+    if (!std::filesystem::exists(other, ec) || std::filesystem::equivalent(other, self, ec)) return;
+    std::wstring args = GetCommandLineW();
+    size_t cut = 0;
+    if (!args.empty() && args[0] == L'"') {
+      cut = args.find(L'"', 1);
+      cut = cut == std::wstring::npos ? args.size() : cut + 1;
+    } else {
+      cut = args.find(L' ');
+      if (cut == std::wstring::npos) cut = args.size();
+    }
+    std::wstring command = L"\"" + other.wstring() + L"\"" + args.substr(cut);
+    STARTUPINFOW si{sizeof(si)};
+    PROCESS_INFORMATION pi{};
+    if (CreateProcessW(other.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr,
+                       rex::filesystem::GetExecutableFolder().c_str(), &si, &pi)) {
+      REXLOG_WARN("Native renderer unavailable: started {} instead", other.filename().string());
+      rex::FlushLogging();
+      CloseHandle(pi.hThread);
+      CloseHandle(pi.hProcess);
+      std::_Exit(0);
+    }
+  }
+#endif
+
   // The SDK's d3d12_adapter = -1 takes the first hardware DXGI adapter, which on a laptop is the integrated GPU
   // (a first test ran on the Intel UHD next to an RTX 5070). Unless the player chose an adapter, use the one
   // with the most dedicated video memory.
-  void OnPreSetup(rex::RuntimeConfig& config) override {
-    (void)config;
+  static void PickDiscreteD3D12Adapter() {
 #if defined(_WIN32)
     if (rex::cvar::HasNonDefaultValue("d3d12_adapter")) return;
     IDXGIFactory1* factory = nullptr;
@@ -67,6 +187,7 @@ class Wwe2k17App : public rex::ReXApp {
 #endif
   }
 
+ public:
   void OnConfigurePaths(rex::PathConfig& paths) override {
     user_data_root_ = paths.user_data_root;
   }

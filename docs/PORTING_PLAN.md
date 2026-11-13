@@ -111,3 +111,24 @@ The game reaches its menus (One on One match type list). What it took, in order:
   loads. Same as 2K15 (TDR in the first 3D scene, NVIDIA and AMD; readback_resolve=none avoids it but draws
   nothing). 2K15/2K16 use the Vulkan backend; the prebuilt v0.10.1 plugin has none, so the SDK has to be
   built from source with REXGLUE_USE_VULKAN=ON (2K16: tools/setup.ps1 / build-sdk10.ps1).
+
+## 2026-11-13: SDK from source, Vulkan, native renderer
+
+- SDK: ReXGlue v0.10.1 source (tag clone with submodules, `sdk/rexglue-src`), WWE 2K15 PC's null GPU patch
+  (`patches/sdk/0001-null-gpu.patch`, applies cleanly), built with clang-cl, REXGLUE_USE_VULKAN=ON, D3D12 ON,
+  Tracy off (`tools/build-sdk.ps1`, ~10 min on 20 jobs), installed to `sdk/rexglue-install`. `tools/build.ps1` uses
+  it when present. The Xenos plugin now has Vulkan and a "null" backend.
+- wwe2k17.exe: `Wwe2k17App::OnPreSetup` loads the Xenos plugin with `wwe2k17_gpu_backend` (default "vulkan", then
+  "any").
+- wwe2k17_native.exe: WWE 2K16 PC's native renderer (re:Blue + plume, Vulkan; `src/reblue`, `src/native`,
+  `src/native_xr`, `cmake/native_renderer.cmake`, deps copied to `native-deps/`), Xenos plugin in "null" mode for the
+  guest command stream. The D3D library of 2K17 is reordered relative to 2K16: only Present/Swap/Sync are 2K16 -
+  0x80088; all 22 hooked functions were found by instruction similarity (`tools/match_functions.py`, every one 1.00)
+  in `src/native/wwe2k17_d3d_names.h`. Only link gap: `GetFileIoStats` (a 2K15 SDK patch), stubbed.
+- First native run (RTX 5070, Vulkan 1.4): 611 game shaders converted on first start (~20 s, stutters meanwhile),
+  then the NXT attract demo match renders correctly at 60.0 fps, whole game ~92 % of one core (Xenos D3D12: 221 %).
+  No device hang (the D3D12 emulation hung at that point).
+- Next: D3D12 and D3D11 builds of the native renderer from WWE '12 PC (it has wwe12_d3d12 / wwe12_d3d11 exes; 2K16's
+  copy is Vulkan only), a played match from the menus, the remaining 2K15 ports (60 fps SetFrameRate, job hand-off,
+  crash guards, texts), launcher integration.
+- wwe2k17.exe on the Vulkan backend (same session): 140 s, past the attract demo match load, 58-60 fps, no hang.
