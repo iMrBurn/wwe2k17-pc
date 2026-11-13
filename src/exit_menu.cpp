@@ -38,6 +38,8 @@
 #include <rex/ui/window.h>
 #include <rex/ui/windowed_app_context.h>
 
+#include "string_tables.h"
+
 REXCVAR_DEFINE_BOOL(wwe2k17_exit_menu, true, "WWE2K17",
                     "Main Menu: EXIT instead of WWE SHOP (with a quit confirmation), no Xbox Live entry or notice");
 
@@ -177,6 +179,7 @@ extern "C" REX_FUNC(sub_82B4A208) {
   const uint32_t dst = ctx.r3.u32;
   const uint32_t dst_cap = ctx.r4.u32;
   __imp__sub_82B4A208(ctx, base);
+  if (ctx.r3.u32 != 0 && dst != 0 && dst_cap >= 20) wwe2k17::MaybeDumpStringTable(base + dst, dst_cap);
   if (!On() || ctx.r3.u32 == 0 || dst == 0 || dst_cap < 20) return;
   uint8_t* const p = base + dst;
   if (LoadLe32(p) != 0) return;

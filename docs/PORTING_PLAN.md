@@ -323,3 +323,30 @@ transition's transparency being applied as a flat layer instead of a gradient, i
 that composites the transition video (the Bink planes are k_8 mirrors, see native_texture_mirror.cpp) and compare
 its blend state and alpha source with what the Xenos path does. Frames kept for reference in the scratchpad
 recordings (`nat_rec.mp4` around 31-33 s, `xen_rec.mp4` around 39-41 s).
+
+### Universe: Story Collection unlocked (2026-11-13, src/universe_stories.cpp, not tested in game yet)
+
+The Story Collection lists the Universe storylines by category (rivalry, tag, championship, special, secret) with,
+for each, a summary made of "clues". The game reveals them as you play: "Complete a story to unlock 15 clues, or
+simulate a story to unlock 2 clues" (string 51792), a locked clue reads "???" (51760), and the secret stories need
+a number of stories played (51764). The Story Collection also has its own "mark as played", which an achievement
+counts (27241).
+
+How it is stored, found from those strings (`tools/list_strings.py` over the tables dumped by the new
+`wwe2k17_dump_strings`, then the generated code for the ids):
+
+- `sub_82A59478(records, story_id)` = `records + story_id * 16`, one 16-byte record per story (up to 1024).
+- `sub_82A59590` reads record byte +0 = played; `sub_82A596D8` reads byte +3, set beside it by the game's own
+  "mark as played" `sub_82A59738`; `sub_82A595F0` reads byte +2.
+- `sub_82A609E0(row, definition)` builds one Story Collection row: +0 story id, +4/+8 from the definition,
+  +12 played, +16 byte +2, +24 "is in list table 8", +28 "is in table 9", +32 byte +3, +36 the story has clues.
+- `sub_82A60AE8(clue)` answers the clue's string id if its +12 is set, else 51760 ("???").
+
+So the hook lets `sub_82A609E0` build the row and then sets +12 and +32, the pair the game's own "mark as played"
+writes. It changes the row only, never the save on disk, and Universe keeps picking stories from the real records
+(`sub_82A7CC20` looks for a story that has *not* been played), so scheduling is untouched. Forcing
+`sub_82A59590` itself would have broken that. Off with `wwe2k17_universe_stories_unlocked = false`.
+
+Not covered: a secret story that the game has not added to its list table yet (row +24 / +28). Those are a table
+membership, not a save flag, so they are left alone; if they still read as locked in game, that is the next thing
+to look at.

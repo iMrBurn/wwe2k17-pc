@@ -22,6 +22,8 @@ set(WWE2K17_SOURCES
     src/shadows.cpp
     src/test_input.cpp
     src/exit_menu.cpp
+    src/string_tables.cpp
+    src/universe_stories.cpp
 )
 
 if(WIN32)
