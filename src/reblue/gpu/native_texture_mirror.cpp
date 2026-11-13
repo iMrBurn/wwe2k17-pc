@@ -49,6 +49,9 @@ namespace xe = rex::graphics::xenos;
 
 std::mutex g_mirror_mutex;
 std::unordered_map<u32, std::unique_ptr<GuestTexture>> g_native_mirrors;
+// Fetch swizzle last applied to each mirror, so a refilled one (its texture and view kept) only
+// rebuilds its view when the game actually changed the swizzle. Guarded by g_mirror_mutex.
+std::unordered_map<u32, u32> g_native_swizzles;
 
 // Asset name per live mirror, normalized to a lowercased basename, so the
 // engine can find the loaded instance of a texture it serves and rewrite it.
@@ -686,16 +689,30 @@ GuestTexture *GetOrCreateNativeMirror(u32 guest_va, u32 name_va) {
   std::lock_guard<std::mutex> lock(g_mirror_mutex);
 
   auto it = g_native_mirrors.find(guest_va);
-  if (it != g_native_mirrors.end()) {
-    // From the bdAllocRenderBuffer hook a hit means the engine re-malloc'd a
-    // freed texture struct at this VA: the previous occupant was released via
-    // the preload table path (hcgTextureListRelease) that we do not hook,
-    // leaving this mirror stale. From NativeTextureReplace it is the rewritten
-    // payload wanting a fresh mirror. Either way, evict and rebuild.
+  // From the bdAllocRenderBuffer hook a hit means the engine re-malloc'd a
+  // freed texture struct at this VA: the previous occupant was released via
+  // the preload table path (hcgTextureListRelease) that we do not hook,
+  // leaving this mirror stale. From NativeTextureReplace it is the rewritten
+  // payload wanting a fresh mirror. Either way, evict and rebuild.
+  //
+  // Except on the per-frame rebuild path (name_va == 0, SvrResolveTexture): a texture whose bytes
+  // changed is offered to the builder, which uploads into it when it describes the same texture
+  // (texture_upload.cpp). WWE 2K17's movies rebuild 3 planes 30 times a second; recreating them
+  // each time cost 135 ms of render thread per second and made the picture judder.
+  GuestTexture *existing = it != g_native_mirrors.end() ? it->second.get() : nullptr;
+  if (existing && name_va == 0) {
+    SetMirrorRefillCandidate(existing);
+  } else if (existing) {
     g_pending_native_destroy[Video::RetireSlot("native mirror")].push_back(
         std::move(it->second));
     g_native_mirrors.erase(it);
+    it = g_native_mirrors.end();
+    existing = nullptr;
   }
+  // The candidate must not outlive this call: every early return below cancels it.
+  struct CandidateGuard {
+    ~CandidateGuard() { SetMirrorRefillCandidate(nullptr); }
+  } candidate_guard;
 
   xe::xe_gpu_texture_fetch_t fetch;
   if (!ReadFetch(guest_va, fetch)) {
@@ -797,9 +814,30 @@ GuestTexture *GetOrCreateNativeMirror(u32 guest_va, u32 name_va) {
   }
   if (!tex)
     return nullptr;
+
+  // Refilled in place: the map entry, its view and its bindless slot are the ones already there.
+  // The fetch swizzle is only re-applied when it changed, since applying it rebuilds the view.
+  if (tex == existing) {
+#if defined(SVR_NATIVE_RENDERER)
+    const u32 swizzle = fetch.swizzle;  // a bit-field: copy it out before taking a reference
+    auto [swz, fresh] = g_native_swizzles.try_emplace(guest_va, swizzle);
+    if (fresh || swz->second != swizzle) {
+      swz->second = swizzle;
+      ApplyFetchSwizzle(tex, fetch, guest_va);
+    }
+#endif
+    return tex;
+  }
+  if (it != g_native_mirrors.end()) {
+    // The builder could not refill it (a different size, format or mip count at the same address).
+    g_pending_native_destroy[Video::RetireSlot("native mirror")].push_back(
+        std::move(it->second));
+    g_native_mirrors.erase(it);
+  }
 #if defined(SVR_NATIVE_RENDERER)
   if (!t_replaced)
     ApplyFetchSwizzle(tex, fetch, guest_va);
+  g_native_swizzles[guest_va] = fetch.swizzle;
 #endif
 
   auto stored = std::unique_ptr<GuestTexture>(tex);

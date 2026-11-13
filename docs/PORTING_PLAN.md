@@ -205,3 +205,27 @@ Measured on the user's screen recording of the intro (`game/movies/menu/WWE17_OP
   diagnostic, shows the sampling is not missing plane updates), presentation pacing.
 - The doubled face on some shots is at least partly the video's own double-exposure style: the Xenos emulation build
   shows the same look on the Cena shot. To confirm once the judder is fixed.
+
+### Movies fixed: textures refilled instead of recreated (2026-11-13)
+
+`GetOrCreateNativeMirror` used to evict a mirror whose bytes changed and build a new host texture (with its view
+and a new bindless slot), retiring the old one. A Bink movie frame is 3 k_8 planes, so the intro ran that 90 times a
+second. Now, on the per-frame rebuild path only (`name_va == 0`, from `SvrResolveTexture`), the existing mirror is
+offered to the builder: when it describes exactly the same texture (format, size, mips, view dimension, and it owns a
+descriptor), `BuildBCMirrorCore` uploads into it and returns it, so the map entry, the view and the slot are kept and
+nothing is retired. Anything else evicts and rebuilds as before. The fetch swizzle is only re-applied to a refilled
+mirror when the game changed it (applying it rebuilds the view), tracked in `g_native_swizzles`.
+
+Measured on the intro (`game/movies/menu/WWE17_OPEN.bk2`), native Vulkan, RTX 5070:
+
+| | before | after |
+|---|---|---|
+| host textures created per second | ~100 | ~36 |
+| render-thread CPU for them | 135-147 ms/s | 11-13 ms/s |
+| render-thread work per frame | 11.8-13.7 ms (of 16.7) | 0.9-2.3 ms |
+| frames over 25 ms | 1-2 per 600 | 0 |
+
+The user confirmed the movie is smooth now. Vulkan, D3D12 and D3D11 all boot and play the intro with no FATAL; the
+picture changes 32-38 times a second in all three (the measuring script tops out around 33-40 captures a second, so
+that is its ceiling, not the game's). `svr_texture_refill = false` restores the old behaviour if a texture is ever
+seen holding stale contents.

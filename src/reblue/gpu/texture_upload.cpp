@@ -15,12 +15,19 @@
 
 #include <plume_render_interface.h>
 
+#include <rex/cvar.h>
+
 #include "core/profiling.h"
 
 #include "core/logging.h"
 #include "gpu/constant_buffers.h"
 #include "gpu/format.h"
 #include "gpu/texture_upload.h"
+
+REXCVAR_DEFINE_BOOL(svr_texture_refill, true, "SvR",
+                    "Upload a changed texture into the host texture already there instead of "
+                    "creating a new one (WWE 2K17 movies: 90 texture creations a second). "
+                    "false = the 2026-11-13 behaviour, if a texture ever shows stale contents");
 
 namespace bd::gpu {
 
@@ -53,6 +60,10 @@ struct BCSubresourceUpload {
   u32 array_index;      // array/face index (0 for non-cube)
 };
 
+// Mirror this build may refill instead of creating a new texture, set by the caller just before
+// (native_texture_mirror.cpp) and consumed by the next build on this thread.
+thread_local GuestTexture *t_refill_candidate = nullptr;
+
 // No committed=true: every subresource is copyTextureRegion-uploaded before
 // first sample. Per-texture committed heaps for thousands of BC textures
 // triggered TDR during load. Uploads precede AllocateSlot so a failure path
@@ -68,6 +79,47 @@ GuestTexture *BuildBCMirrorCore(const BCMirrorDesc &d,
   BeginCommandList(s);
   if (!s.command_list_open)
     return nullptr;
+
+  // WWE 2K17: a Bink movie frame is 3 k_8 planes, rebuilt 30 times a second. Creating a host
+  // texture, its view and a bindless slot for each of them (and retiring the previous ones) cost
+  // 135 ms of render thread per second and made the picture judder. When the mirror being rebuilt
+  // describes exactly the same texture, its contents go into the one that is already there: no
+  // create, no view, no slot, nothing to retire, and the descriptor keeps pointing at it.
+  GuestTexture *refill = t_refill_candidate;
+  t_refill_candidate = nullptr;
+  if (!REXCVAR_GET(svr_texture_refill))
+    refill = nullptr;
+  if (refill && !(refill->texture && refill->width == d.width && refill->height == d.height &&
+                  refill->depth == d.depth && refill->mipLevels == d.mip_levels &&
+                  refill->format == d.format && refill->viewDimension == d.view_dim &&
+                  refill->descriptorIndex != kInvalidDescriptorIndex))
+    refill = nullptr;
+  if (refill) {
+    std::vector<ConstantAllocation> refills(upload_count);
+    for (u32 i = 0; i < upload_count; ++i) {
+      refills[i] = UploadHostBytes(uploads[i].data, static_cast<u32>(uploads[i].size), 0x200);
+      if (!refills[i].memory) {
+        BD_ERROR("{}: refill of subresource {} ({} bytes) failed", d.caller_name, i,
+                 uploads[i].size);
+        return nullptr;  // the texture stays as it was, with its previous contents
+      }
+    }
+    plume::RenderTextureBarrier to_copy(refill->texture, plume::RenderTextureLayout::COPY_DEST);
+    s.command_list->barriers(plume::RenderBarrierStage::COPY, &to_copy, 1);
+    refill->layout = plume::RenderTextureLayout::COPY_DEST;
+    for (u32 i = 0; i < upload_count; ++i) {
+      s.command_list->copyTextureRegion(
+          plume::RenderTextureCopyLocation::Subresource(refill->texture, uploads[i].subresource,
+                                                        uploads[i].array_index),
+          plume::RenderTextureCopyLocation::PlacedFootprint(
+              refills[i].ref.ref, d.format, uploads[i].width, uploads[i].height,
+              uploads[i].fp_depth, uploads[i].row_width_texels, refills[i].ref.offset));
+    }
+    plume::RenderTextureBarrier to_read(refill->texture, plume::RenderTextureLayout::SHADER_READ);
+    s.command_list->barriers(plume::RenderBarrierStage::GRAPHICS, &to_read, 1);
+    refill->layout = plume::RenderTextureLayout::SHADER_READ;
+    return refill;
+  }
 
   auto *t = new GuestTexture(d.resource_type);
   t->width = d.width;
@@ -146,6 +198,8 @@ GuestTexture *BuildBCMirrorCore(const BCMirrorDesc &d,
 }
 
 } // namespace
+
+void SetMirrorRefillCandidate(GuestTexture *t) { t_refill_candidate = t; }
 
 GuestTexture *BuildBCMirrorTexture(u32 width, u32 height, u32 format,
                                           const void *block_data,

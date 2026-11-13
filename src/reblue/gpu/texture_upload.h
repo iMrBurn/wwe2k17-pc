@@ -31,6 +31,12 @@ struct BCMipLevel {
   u32 row_width_texels; // PlacedFootprint rowWidth for this level
 };
 
+// Offer `t` to the next builder call on this thread: if it describes exactly the same texture, the
+// builder uploads into it and returns it instead of creating a new one (and the caller keeps its
+// entry, view and bindless slot). Consumed by that one call, match or not; nullptr cancels it.
+// Added for WWE 2K17's movies, whose planes are rebuilt 30 times a second.
+void SetMirrorRefillCandidate(GuestTexture *t);
+
 // Every builder below takes data that is already untiled with 256-byte-aligned
 // rows, and returns a heap-new GuestTexture the caller owns, or nullptr.
 GuestTexture *BuildBCMirrorTexture(u32 width, u32 height, u32 format,
