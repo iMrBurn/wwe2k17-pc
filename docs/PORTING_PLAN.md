@@ -303,3 +303,23 @@ where the two freezes are: 1448 ms and 798 ms, plus a window with 34 frames over
 29,500 to 39,328 bytes during the session, so the next run should build them at startup instead (e73b139). That is
 the measurement I could not make earlier and it should be made now: play the same match again and count the
 "render-thread compile (miss, not in residual)" lines and the freezes.
+
+### Transition videos: wrong in the native renderer (2026-11-13, user report, not fixed)
+
+The user reported "mini visual bugs" on the transition videos, like the intro. Compared the same attract transition
+(the smoke sweep that ends the demo match and brings up the WWE / 2K17 logo) in both renderers, recorded with
+`ffmpeg -f gdigrab -i title=<window title>` (the PrintWindow capture of `tools/capture_window.ps1` returns stale
+frames on this window while the game is in some scenes: it gave 30 identical images while the log showed the game
+rendering a 3D scene at 33 fps, so do not trust it for this):
+
+| | Xenos emulation (reference) | native renderer |
+|---|---|---|
+| smoke sweep | soft gradient, fades over the scene | flat grey wash over the whole picture |
+| WWE / 2K17 logo | clean edges, even fade | blocky black edges around the logo |
+
+So it is not the source video: the Xenos build shows the same transition correctly. The look points at the
+transition's transparency being applied as a flat layer instead of a gradient, i.e. the alpha of those video frames
+(or the blend state of the draw that composites them) is mishandled in the native path. Next step: find the draw
+that composites the transition video (the Bink planes are k_8 mirrors, see native_texture_mirror.cpp) and compare
+its blend state and alpha source with what the Xenos path does. Frames kept for reference in the scratchpad
+recordings (`nat_rec.mp4` around 31-33 s, `xen_rec.mp4` around 39-41 s).
