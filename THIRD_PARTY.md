@@ -2,13 +2,15 @@
 
 This project's own code is under the **GPL-3.0** (see `LICENSE`), like WWE '12 PC, WWE 2K15 PC and WWE 2K16 PC, whose
 native renderer it reuses. The components below keep their own licenses. No game data (XEX, disc files, extracted or
-converted shaders, generated code) is included in this repository or in its releases.
+converted shaders, generated code) is included in this repository. Like WWE '12 PC, the Direct3D 12 / Direct3D 11
+executables built from it carry the game's shaders converted at build time; the Vulkan one converts them on the
+player's PC.
 
 | Component | Use | License |
 |---|---|---|
 | [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) v0.10.1 | static recompilation, runtime, Xenos GPU emulation (built from source by `tools/build-sdk.ps1` with `patches/sdk`) | BSD 3-Clause (derived from [Xenia](https://xenia.jp)) |
 | [re:Blue](https://github.com/zolaware/reblue) | core of the native renderer (`src/reblue`) | BSD 3-Clause (`src/reblue/LICENSE.reblue`) |
-| [plume](https://github.com/zolaware/plume) | Vulkan layer of the native renderer (built from `native-deps`, not vendored) | MIT |
+| [plume](https://github.com/zolaware/plume) | Vulkan / Direct3D 12 / Direct3D 11 layer of the native renderer (built from `native-deps`, not vendored; its D3D11 backend comes from the SvR 2011 PC port by KaikoClanworth1, adapted in WWE '12 PC with their agreement) | MIT |
 | [XenosRecomp](https://github.com/hedge-dev/XenosRecomp) (re:Blue fork) | Xbox 360 shader to HLSL translator, built into `wwe2k17_native.exe` (converts the player's own shaders) | MIT (`third_party/licenses/XenosRecomp-LICENSE.md`) |
 | [DirectX Shader Compiler](https://github.com/microsoft/DirectXShaderCompiler) | `dxcompiler.dll`, shipped beside `wwe2k17_native.exe`: HLSL to SPIR-V on the player's PC | University of Illinois/NCSA (`third_party/licenses/DXC-LICENSE.txt`, `DXC-ThirdPartyNotices.txt`) |
 | smol-v, xxHash, fmt | SPIR-V packing, shader hashes, text formatting (XenosRecomp's copies) | MIT, BSD 2-Clause, MIT (`third_party/licenses`) |
@@ -22,4 +24,7 @@ Projects this port takes code from (all by iMrBurn unless noted, GPL-3.0):
   window capture and input scripts, the cache drive mount.
 - WWE 2K15 PC: the render-thread ring-wait yield and pacing log (`src/render_hooks.cpp`), the null GPU SDK patch
   (`patches/sdk/0001-null-gpu.patch`), the content-name UTF-8 idea (`src/content_hooks.cpp`).
+- WWE '12 PC: the Direct3D 12 and Direct3D 11 builds of the native renderer (its commits replayed on `src/reblue`,
+  `src/prelink/wwe12_prelink.cpp`, `tools/convert_shaders_d3d11.py`, `tools/host_shader_d3d11.py`, `src/native/wwe2k17_dxc.cpp`).
 - WWE '12 PC and nefariousjosiah's SvR 2008/2009/2010 ports (GPL-3.0): where the native renderer comes from.
+- KaikoClanworth1's SvR 2011 PC port: the Direct3D 11 backend of plume, through WWE '12 PC.

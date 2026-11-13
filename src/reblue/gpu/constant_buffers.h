@@ -53,7 +53,9 @@ struct SharedConstants {
   // Half-pixel NDC nudge read only by the substituted 2D blit VS
   float blitHalfPixelOffsetX{}; // c21.x, byte 336
   float blitHalfPixelOffsetY{}; // c21.y, byte 340
-  u32 _pad_c21_z{};             // c21.z, byte 344
+  // wwe12_d3d11.exe: 1 when the viewport's depth range is reversed (MinZ > MaxZ), which D3D11
+  // refuses: the viewport is swapped and every vertex shader flips z instead (g_SvrDepthFlip).
+  u32 depthFlip{};              // c21.z, byte 344
   u32 _pad_c21_w{};             // c21.w, byte 348
 #if defined(SVR_NATIVE_RENDERER)
   // SvR samples fetch slots 16-31 too; the SvR XenosRecomp patch puts their indices after the
@@ -111,6 +113,13 @@ ConstantAllocation UploadSharedConstants(u32 device_guest);
 // Root bindings do not survive begin(), so this drops the 'shared CB still
 // bound' reuse gate. Call on every command list reset.
 void InvalidateSharedBinding();
+#if defined(REBLUE_D3D11)
+// wwe12_d3d11.exe (gpu/d3d11_slots.cpp): the bindless entries of the shared block bound to
+// registers before a draw, and their swizzles written in their place.
+void D3D11BindSlots(SharedConstants &c);
+void D3D11BindHostSlot(u32 texture_index, u32 sampler_index);
+void D3D11ForgetSlots();
+#endif
 
 // alignment defaults to 4 (the upload buffer is WRITE_COMBINE), and CBV callers
 // pass 256.

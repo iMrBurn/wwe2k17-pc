@@ -4,7 +4,7 @@ Unofficial native Windows x64 port of **WWE 2K17 (Xbox 360)**, made by staticall
 
 **This repository contains project code and documentation only. No game data is included or linked.** You need your own copy of the Xbox 360 game and its Title Update 1.04. Please do not ask for game files in the issues.
 
-> **Status: early work in progress.** Two builds: `wwe2k17_native.exe` (native renderer, Vulkan: the attract demo match runs at 60 fps) and `wwe2k17.exe` (Xbox GPU emulation, Vulkan). A match from the menus is not tested yet. No release.
+> **Status: early work in progress.** The game boots and plays its demo matches at 60 fps with the native renderer in Vulkan (`wwe2k17_native.exe`), Direct3D 12 (`wwe2k17_d3d12.exe`) and Direct3D 11 (`wwe2k17_d3d11.exe`), and with the Xbox GPU emulation in Vulkan (`wwe2k17.exe`). A match from the menus is not tested yet. No release.
 
 ## Building
 
@@ -31,7 +31,14 @@ Needs Windows 10/11 x64, Visual Studio 2022 (C++ workload), LLVM/Clang 20+, CMak
 
 DLC: copy your own WWE 2K17 DLC packages into `userdata\dlc_inbox\`; the game installs them at the next start.
 
-3. Run in a window (log in `logs\`):
+3. Optional, for `wwe2k17_d3d12.exe` / `wwe2k17_d3d11.exe`: collect and convert the game's shaders (starts the game once for about a minute), then build again:
+
+   ```powershell
+   tools\dump_shaders.ps1
+   tools\build.ps1 -NoCodegen
+   ```
+
+4. Run in a window (log in `logs\`; `$env:WWE2K17_EXE` = `wwe2k17_native`, `wwe2k17_d3d12` or `wwe2k17_d3d11` for the native renderer):
 
    ```powershell
    tools\run.ps1

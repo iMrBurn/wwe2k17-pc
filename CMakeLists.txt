@@ -25,30 +25,42 @@ else()
     add_executable(wwe2k17 ${WWE2K17_SOURCES})
 endif()
 
-# Native renderer (docs/PORTING_PLAN.md): a second executable, wwe2k17_native.exe, that draws the game's D3D calls
-# through re:Blue + plume (Vulkan), taken from WWE 2K16 PC (itself from WWE 2K15 PC / WWE '12 PC). It links the same
-# recompiled objects; wwe2k17.exe (Xenos GPU emulation) is unchanged. Needs plume and reblue-XenosRecomp in
-# native-deps/ (WWE2K17_NATIVE_DEPS). Added before the SDK libraries so plume's VMA wins over rexruntime's.
-option(WWE2K17_NATIVE_RENDERER "Also build wwe2k17_native.exe (native Vulkan renderer)" ON)
+# Native renderer (docs/PORTING_PLAN.md, cmake/native_renderer.cmake): executables that draw the game's D3D calls
+# through re:Blue + plume instead of emulating the Xenos GPU, from the same recompiled objects as wwe2k17.exe:
+# wwe2k17_native.exe (Vulkan), wwe2k17_d3d12.exe and wwe2k17_d3d11.exe (once the game's shaders were converted at
+# build time, tools\dump_shaders.ps1). Added before the SDK libraries so plume's VMA wins over rexruntime's.
+option(WWE2K17_NATIVE_RENDERER "Also build the native renderer executables" ON)
+set(WWE2K17_NATIVE_TARGETS "")
 if(WWE2K17_NATIVE_RENDERER)
     include(cmake/native_renderer.cmake)
     add_executable(wwe2k17_native WIN32 ${WWE2K17_SOURCES})
     wwe2k17_add_native_renderer(wwe2k17_native)
+    list(APPEND WWE2K17_NATIVE_TARGETS wwe2k17_native)
+    if(WWE2K17_D3D12_EXE)
+        add_executable(wwe2k17_d3d12 WIN32 ${WWE2K17_SOURCES})
+        wwe2k17_add_native_renderer(wwe2k17_d3d12 D3D12)
+        list(APPEND WWE2K17_NATIVE_TARGETS wwe2k17_d3d12)
+    endif()
+    if(WWE2K17_D3D11_EXE)
+        add_executable(wwe2k17_d3d11 WIN32 ${WWE2K17_SOURCES})
+        wwe2k17_add_native_renderer(wwe2k17_d3d11 D3D11)
+        list(APPEND WWE2K17_NATIVE_TARGETS wwe2k17_d3d11)
+    endif()
 endif()
 
 rexglue_setup_target(wwe2k17 GPU_PLUGINS xenos)
 
-if(WWE2K17_NATIVE_RENDERER)
+foreach(native_target IN LISTS WWE2K17_NATIVE_TARGETS)
     # wwe2k17_recomp only exists once codegen has written generated/ (a fresh checkout's first configure doesn't).
     if(TARGET wwe2k17_recomp)
-        target_sources(wwe2k17_native PRIVATE $<TARGET_OBJECTS:wwe2k17_recomp>)
+        target_sources(${native_target} PRIVATE $<TARGET_OBJECTS:wwe2k17_recomp>)
     endif()
-    target_include_directories(wwe2k17_native PRIVATE
+    target_include_directories(${native_target} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${REXGLUE_ENTRYPOINT_INCLUDE_DIR})
-    target_link_libraries(wwe2k17_native PRIVATE rex::runtime)
-    add_dependencies(wwe2k17_native wwe2k17_codegen)
-    rexglue_apply_target_settings(wwe2k17_native)
-    rexglue_configure_target(wwe2k17_native GPU_PLUGINS xenos)
-endif()
+    target_link_libraries(${native_target} PRIVATE rex::runtime)
+    add_dependencies(${native_target} wwe2k17_codegen)
+    rexglue_apply_target_settings(${native_target})
+    rexglue_configure_target(${native_target} GPU_PLUGINS xenos)
+endforeach()

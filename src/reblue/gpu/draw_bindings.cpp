@@ -19,6 +19,11 @@
 
 #include "gpu/shaders/shader_constants.h"
 
+#if defined(SVR_NATIVE_RENDERER) && defined(REBLUE_D3D12)
+#include <rex/cvar.h>
+REXCVAR_DECLARE(bool, svr_d3d12_depth_flip);
+#endif
+
 namespace bd::gpu {
 
 // ALPHAREF mirror for SharedConstants. Set by the bdSetRenderState hook (arg
@@ -225,9 +230,21 @@ void Video::FlushViewport() {
 
   if (s.dirtyStates.viewport) {
     plume::RenderViewport vp = s.viewport;
-#if defined(SVR_NATIVE_RENDERER) && !defined(REBLUE_D3D12)
-    // SvR passes the game's own MinZ/MaxZ; Vulkan maps a reversed range (MinZ > MaxZ) exactly as
-    // Xenos does, so it is kept. (D3D12 requires MinZ <= MaxZ.)
+#if defined(SVR_NATIVE_RENDERER)
+    // SvR passes the game's own MinZ/MaxZ: Vulkan and D3D12 both map a reversed range (MinZ >
+    // MaxZ) exactly as Xenos does, so it is kept. WWE '12 draws its 3D scenes with one: swapped,
+    // the D3D12 exe lost every wrestler and most of the crowd to the depth test.
+#if defined(REBLUE_D3D11)
+    // D3D11 refuses MinDepth > MaxDepth: swapped here, and the vertex shaders give z' = w - z
+    // (SharedConstants::depthFlip), the same depth values.
+    if (vp.minDepth > vp.maxDepth)
+      std::swap(vp.minDepth, vp.maxDepth);
+#elif defined(REBLUE_D3D12)
+    // Same on D3D12 (svr_d3d12_depth_flip): old Intel drivers (UHD 620, #7) mishandle the
+    // reversed range, the wrestlers and crowd came out half see-through.
+    if (REXCVAR_GET(svr_d3d12_depth_flip) && vp.minDepth > vp.maxDepth)
+      std::swap(vp.minDepth, vp.maxDepth);
+#endif
 #else
     if (vp.minDepth > vp.maxDepth)
       std::swap(vp.minDepth, vp.maxDepth);

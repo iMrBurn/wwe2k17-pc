@@ -132,3 +132,28 @@ The game reaches its menus (One on One match type list). What it took, in order:
   copy is Vulkan only), a played match from the menus, the remaining 2K15 ports (60 fps SetFrameRate, job hand-off,
   crash guards, texts), launcher integration.
 - wwe2k17.exe on the Vulkan backend (same session): 140 s, past the attract demo match load, 58-60 fps, no hang.
+
+## 2026-11-13: D3D12 and D3D11 native builds (from WWE '12 PC)
+
+- User's decision: like WWE '12 PC, the D3D12 / D3D11 exes carry the game's shaders converted at build time
+  (CLAUDE.md hard rules: exception). The Vulkan exe still converts them on the player's PC.
+- Shaders: 2K17's .pac files are XCTD-compressed (0x0FF512ED), so WWE '12's find_shaders.py finds nothing in them.
+  The game creates all 611 shaders at boot instead: `--wwe2k17_dump_shaders=<folder>` in the Vulkan exe writes each
+  container; `tools/dump_shaders.ps1` runs that, builds reblue-XenosRecomp's CLI (work/xenosrecomp-build) and writes
+  generated/native/shader_cache.cpp + work/shaders/d3d11/hlsl. (A first try passed the folder through `powershell
+  -File` and its spaces cut it: 611 files landed in Desktop\WWE, moved back and the folder removed.)
+- Renderer: a full 3-way merge of WWE '12's re:Blue (HEAD f06b344, base 5601b0a = the copy 2K15/2K16 took) gave 9
+  conflicts, but the glue (svr_resources.cpp) had 12 more where 2K16 and WWE '12 both reworked attire read-backs:
+  dropped. Instead WWE '12's D3D commits only (f1b5864 d106d11 71bd3f3 f220536 9d96e9e de87fc5 eaa5863 9bcd772 b47cf9d
+  c987d89 8d97c15) replayed file by file on src/reblue: one conflict (device.cpp, kept 2K16's GPU fallback loop and
+  made its Vulkan feature check Vulkan-only). Added `Wwe12DxcAvailable` (src/native/wwe2k17_dxc.cpp).
+- plume: WWE '12's copy (D3D11 backend from the SvR 2011 PC port, D3D12 fixes) with 2K15/2K16's Vulkan pipeline cache
+  merged in (two conflicts, both sides had a pipeline cache: kept ours). The old copy stays as native-deps/plume.2k16.
+- XenosRecomp: WWE '12's shader_common.h / shader_recompiler.cpp / dxc_compiler.cpp (SVR_DXIL_DEPTH_FLIP: z' = w - z
+  in vertex shaders, D3D12 cannot take MinZ > MaxZ). Without them the D3D12 picture was a blurred empty arena (no
+  wrestlers, no ring): exactly WWE '12's "keep the reversed depth" trap. Our older files kept as *.2k16.
+- cmake/native_renderer.cmake: three variants (Vulkan run-time shaders; D3D12 pre-linked DXIL from wwe2k17_prelink =
+  WWE '12's wwe12_prelink; D3D11 DXBC by tools/convert_shaders_d3d11.py with the Windows SDK's fxc). D3D exes are
+  built when generated/native/shader_cache.cpp exists.
+- Results on the RTX 5070 (attire demo matches, no keys sent): D3D12 12_2, Cesaro vs The Miz, 60.0 fps, 100 s; D3D11
+  11_1, Balor vs Joe, 59.4-59.9 fps, 100 s; wwe2k17_native.exe (Vulkan) rechecked after the converter change.

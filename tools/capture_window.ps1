@@ -1,6 +1,6 @@
 # Saves an image of the game window (even when other windows cover it) for automated tests.
 #   tools\capture_window.ps1 [-Out logs\shot.png] [-Width 960]
-param([string]$Out = "logs\shot.png", [int]$Width = 960, [string[]]$Process = @("wwe2k17", "wwe2k17_native"))
+param([string]$Out = "logs\shot.png", [int]$Width = 960, [string[]]$Process = @("wwe2k17", "wwe2k17_native", "wwe2k17_d3d12", "wwe2k17_d3d11"))
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 Add-Type @"

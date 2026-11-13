@@ -25,10 +25,28 @@
 #include "gpu/pipeline/pso_recorder.h"
 #include "gpu/shaders/shader_cache.h"
 
-#if defined(REBLUE_D3D12)
+#if defined(REBLUE_D3D11)
+#define MINIZ_HEADER_FILE_ONLY
+#include <miniz.h>
+// The game's shaders as DXBC, one per spec-constant subset (tools/convert_shaders_d3d11.py,
+// generated/native/dxbc_shader_cache.cpp): zlib-compressed, sorted by (hash, constants).
+struct Wwe12DxbcEntry {
+  uint64_t hash;
+  uint32_t specConstants;
+  uint32_t offset;
+  uint32_t size;
+};
+extern const Wwe12DxbcEntry g_wwe12DxbcEntries[];
+extern const size_t g_wwe12DxbcEntryCount;
+extern const size_t g_wwe12DxbcRawSize;
+extern const size_t g_wwe12DxbcPackedSize;
+extern const unsigned char g_wwe12DxbcPacked[];
+#elif defined(REBLUE_D3D12)
 #define MINIZ_HEADER_FILE_ONLY
 #include "gpu/shaders/linked_shader_cache.h"
 #include "gpu/shaders/shader_linker.h"
+#include <unordered_set>
+bool Wwe12DxcAvailable();  // native/wwe12_dxc.cpp
 #include <miniz.h>
 #else
 #include <cstdio>
@@ -75,7 +93,38 @@ ShaderCacheEntry *FindShaderCacheEntry(u64 hash) {
 // and createShader run unlocked so precache workers compile in parallel.
 std::mutex g_shader_link_mutex;
 
-#if defined(REBLUE_D3D12)
+#if defined(REBLUE_D3D11)
+std::once_flag g_dxbc_cache_once;
+std::unique_ptr<u8[]> g_dxbc_cache;
+
+const u8 *DxbcCache() {
+  std::call_once(g_dxbc_cache_once, [] {
+    auto buf = std::make_unique<u8[]>(g_wwe12DxbcRawSize);
+    mz_ulong out_len = static_cast<mz_ulong>(g_wwe12DxbcRawSize);
+    if (mz_uncompress(buf.get(), &out_len, g_wwe12DxbcPacked,
+                      static_cast<mz_ulong>(g_wwe12DxbcPackedSize)) != MZ_OK ||
+        out_len != g_wwe12DxbcRawSize) {
+      BD_ERROR("DXBC shader cache decompression failed");
+      return;
+    }
+    g_dxbc_cache = std::move(buf);
+  });
+  return g_dxbc_cache.get();
+}
+
+const Wwe12DxbcEntry *FindDxbcEntry(u64 hash, u32 masked) {
+  const Wwe12DxbcEntry *first = g_wwe12DxbcEntries;
+  const Wwe12DxbcEntry *end = first + g_wwe12DxbcEntryCount;
+  const auto *it = std::lower_bound(
+      first, end, std::pair{hash, masked},
+      [](const Wwe12DxbcEntry &lhs, const std::pair<u64, u32> &rhs) {
+        if (lhs.hash != rhs.first)
+          return lhs.hash < rhs.first;
+        return lhs.specConstants < rhs.second;
+      });
+  return (it != end && it->hash == hash && it->specConstants == masked) ? it : nullptr;
+}
+#elif defined(REBLUE_D3D12)
 // The linked-in DXIL shader cache ships ZSTD-compressed. Decompress it once on
 // first shader resolve.
 std::once_flag g_dxil_cache_once;
@@ -377,6 +426,28 @@ plume::RenderShader *GetOrLinkShader(GuestShader *gs, u32 specConstants) {
   return PublishShader(gs,
                        device->createShader(spirv.data(), spirv.size(), "main",
                                             plume::RenderShaderFormat::SPIRV));
+#elif defined(REBLUE_D3D11)
+  const u8 *cache = DxbcCache();
+  if (!cache)
+    return nullptr;
+  const u32 masked = specConstants & entry->specConstantsMask;
+  {
+    std::lock_guard lock(g_shader_link_mutex);
+    auto it = gs->linkedShaders.find(masked);
+    if (it != gs->linkedShaders.end())
+      return it->second.get();
+  }
+  const Wwe12DxbcEntry *dxbc = FindDxbcEntry(entry->hash, masked);
+  if (!dxbc) {
+    BD_WARN("GetOrLinkShader: no DXBC variant, not drawn (hash=0x{:016X} mask=0x{:X})",
+            entry->hash, masked);
+    return nullptr;
+  }
+  auto sh = device->createShader(cache + dxbc->offset, dxbc->size, "main",
+                                 plume::RenderShaderFormat::DXBC);
+  std::lock_guard lock(g_shader_link_mutex);
+  auto [it, inserted] = gs->linkedShaders.try_emplace(masked, std::move(sh));
+  return it->second.get();
 #else
   const u8 *cache = DxilCache();
   if (!cache)
@@ -412,6 +483,18 @@ plume::RenderShader *GetOrLinkShader(GuestShader *gs, u32 specConstants) {
     sh = device->createShader(linkedCache + pre->dxilOffset, pre->dxilSize,
                               "main", plume::RenderShaderFormat::DXIL);
   } else {
+    // WWE '12: the shipped exe has no DXC (wwe12_prelink links every variant at build time).
+    // Without it a missing variant is not drawn, logged once.
+    if (!Wwe12DxcAvailable()) {
+      static std::mutex s_missing_mutex;
+      static std::unordered_set<u64> s_missing;
+      std::lock_guard missing_lock(s_missing_mutex);
+      if (s_missing.insert(entry->hash ^ (u64(masked) << 56)).second)
+        BD_WARN("GetOrLinkShader: no prelinked variant and no DXC, not drawn "
+                "(hash=0x{:016X} mask=0x{:X})",
+                entry->hash, masked);
+      return nullptr;
+    }
     BD_WARN("GetOrLinkShader: no prelinked variant, runtime DXC link "
             "(hash=0x{:016X} mask=0x{:X})",
             entry->hash, masked);
