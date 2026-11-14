@@ -324,7 +324,7 @@ that composites the transition video (the Bink planes are k_8 mirrors, see nativ
 its blend state and alpha source with what the Xenos path does. Frames kept for reference in the scratchpad
 recordings (`nat_rec.mp4` around 31-33 s, `xen_rec.mp4` around 39-41 s).
 
-### Universe: Story Collection unlocked (2026-11-13, src/universe_stories.cpp, not tested in game yet)
+### Universe: Story Collection unlocked (2026-11-13, finished and tested 2026-11-14, src/universe_stories.cpp)
 
 The Story Collection lists the Universe storylines by category (rivalry, tag, championship, special, secret) with,
 for each, a summary made of "clues". The game reveals them as you play: "Complete a story to unlock 15 clues, or
@@ -341,12 +341,21 @@ How it is stored, found from those strings (`tools/list_strings.py` over the tab
 - `sub_82A609E0(row, definition)` builds one Story Collection row: +0 story id, +4/+8 from the definition,
   +12 played, +16 byte +2, +24 "is in list table 8", +28 "is in table 9", +32 byte +3, +36 the story has clues.
 - `sub_82A60AE8(clue)` answers the clue's string id if its +12 is set, else 51760 ("???").
+- `sub_8281ACD8(categories, out)` is the STORY CATEGORIES screen: it walks every story
+  (`sub_82A5A828` count, `sub_82A5A8C8(i)`), maps id to definition (`sub_82A60BA0` / `sub_82A60CA8`), reads the
+  category index at definition+40 and counts with the three record queries above into per-category slots.
+- `sub_8281B198` fills that screen's widgets and ends each category with
+  `sub_8280B838(widget, count == 0)`: a category is greyed out **only** when its own count is zero. So there is no
+  separate "locked" flag to clear - fill the counters and the greying goes away with them.
 
-So the hook lets `sub_82A609E0` build the row and then sets +12 and +32, the pair the game's own "mark as played"
-writes. It changes the row only, never the save on disk, and Universe keeps picking stories from the real records
-(`sub_82A7CC20` looks for a story that has *not* been played), so scheduling is untouched. Forcing
-`sub_82A59590` itself would have broken that. Off with `wwe2k17_universe_stories_unlocked = false`.
+**First design, wrong.** Hooking only the row builder `sub_82A609E0` and setting row +12 / +32 filled the rows but
+not the screen: `sub_8281ACD8` reads the save records directly, so the totals stayed 0/42 ... 0/793 at 0 % and
+every category stayed greyed.
 
-Not covered: a secret story that the game has not added to its list table yet (row +24 / +28). Those are a table
-membership, not a save flag, so they are left alone; if they still read as locked in game, that is the next thing
-to look at.
+**What ships.** The hook forces the three record queries themselves to answer "yes" instead:
+`sub_82A59590`, `sub_82A595F0`, `sub_82A596D8` return 1 when they would have returned 0. The save on disk is
+never written. The one exception keeps Universe working: `sub_82A7CC20` looks for a story that has *not* been
+played in order to schedule the next one, so a thread-local counter around it makes `sub_82A59590` give the real
+answer while that call is on the stack. Off with `wwe2k17_universe_stories_unlocked = false`.
+
+Tested 2026-11-14 on `wwe2k17_native.exe`: counters full, no category greyed, a story can be picked, no crash.
