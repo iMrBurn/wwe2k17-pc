@@ -72,6 +72,17 @@ DLC: copy your own WWE 2K17 DLC packages into `userdata\dlc_inbox\`; the game in
    tools\run.ps1
    ```
 
+5. Optional, to make a folder (and a zip) someone else can unpack:
+
+   ```powershell
+   tools\package.ps1 -Zip
+   ```
+
+   It copies the four renderers, the launcher and the two seed caches built on your machine
+   (`pipelines_seed.w12p`, `declarations_seed.w12d`), so the graphics work is prepared in the
+   background from the first start instead of freezing the picture the first time a screen is drawn.
+   It never copies game data, and refuses to finish if any ended up in the folder.
+
 ## Layout
 
 - `wwe2k17_manifest.toml`: ReXGlue project (code generated from the Title Update 1.04 image).
