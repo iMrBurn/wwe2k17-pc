@@ -481,3 +481,40 @@ path reads guest memory as the GPU executes, a frame after we snapshot it into a
 measuring is the native presented cadence against Xenos on the same scene with a frame-accurate capture, since
 the screen recordings compared so far (30 fps, lossy) could not separate 15 Hz from 30 Hz reliably.
 
+#### What WWE '12 PC's rendering session answered (2026-11-14)
+
+Asked directly, since our native renderer descends from theirs through WWE 2K16. Summary of their reply:
+
+- They have **never seen this**: no report of juddering Bink movies in their native build (titantrons, entrances,
+  menus). So there is no ready-made fix to port. Their nearest note is a probe (`svr_texture_churn_probe`,
+  off by default) that counted about 270 texture rebuilds a second during entrances, most likely the movie
+  planes, and genuinely changing content - never studied for smoothness.
+- Their full hash on every frame is **not** a movie-related choice: they simply never took 2K16's sampled-hash
+  shortcut. So that difference carries no hidden fix either.
+- They have **no special handling of the movie path**: no synchronisation with the decoding thread, no special
+  upload order. What their projects do have is a rule never to submit or reopen the command list mid-frame
+  (GPU waits go at the end of the frame, read-backs are deferred), and the frame cadence driven by the game's
+  own SetFrameRate struct.
+- Their hypothesis matches the one left open here: Xenos reads the texture's memory **as it executes the draw**,
+  while our mirror snapshots the content at another moment, so a mirror taken while the Bink decoder's thread is
+  mid-write lands early or late depending on the race - and more often on the bigger luma plane. Two things to
+  try: check or mirror the texture as close as possible to the draw that samples it, and find the Bink player's
+  **double buffer** (two sets of planes used in turn) and only ever take the set being displayed.
+- For frame-accurate capture they use RenderDoc 1.46 (Vulkan layer through environment variables). For cadence
+  they would log the Bink player's own frame counter beside the render frame, which would say directly whether
+  a movie frame is skipped or shown twice.
+
+**The double buffer is already visible in our own draw log** and was misread at the time as two movies playing
+at once. In `logs/run-20261114-092437.log` (F9 during the Main Event transition), three captured frames hold two
+draws each, and the plane addresses swap between the two pixel shaders from the third frame on:
+
+| frame | ps 21D36E08AC63A6F4 | ps 9A353D5F5F1B7CD2 |
+|---|---|---|
+| 1 | 0x1DACB002 | 0x1D98B002 |
+| 2 | 0x1DACB002 | 0x1D98B002 |
+| 3 | 0x1D98B002 | 0x1DACB002 |
+
+Two sets of four planes (Y 640x640, two chroma 320x320, alpha 640x640) used in turn: that is the player's double
+buffer, not two movies. So the second suggestion is testable here with what is already logged - the next step is
+to find which set the player considers displayed, and make sure a mirror is never built from the other one.
+
