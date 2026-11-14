@@ -49,6 +49,10 @@ REXCVAR_DEFINE_BOOL(svr_texture_full_hash, false, "SvR",
                     "Hash every texture in full on each frame it is used, instead of a sampled hash for "
                     "those of 16 KB and more (diagnostic: catches plane updates the sampling misses)");
 
+REXCVAR_DEFINE_BOOL(svr_log_texture_cadence, false, "SvR",
+                    "Diagnostic: log every texture rebuild with the frame it happened in, to read "
+                    "the cadence of a movie's plane textures off the log.");
+
 REXCVAR_DEFINE_BOOL(svr_release_stale_targets, true, "SvR",
                     "Free host render targets the game no longer uses (false: keep them, the "
                     "0.6.0 behaviour, which leaks video memory).");
@@ -1557,6 +1561,11 @@ GuestTexture *SvrResolveTexture(u32 texture_va) {
                             .count();
   g_mirror_builds.fetch_add(1, std::memory_order_relaxed);
   g_mirror_build_ns.fetch_add(build_ns, std::memory_order_relaxed);
+  // Development aid: every rebuild with the frame it happened in, so the cadence of a movie's plane
+  // textures can be read off the log (a plane of a 30 fps movie in a 60 fps game should be rebuilt
+  // every other frame; an uneven run of gaps is the picture juddering).
+  if (REXCVAR_GET(svr_log_texture_cadence))
+    BD_INFO("[texcad] f{} va 0x{:08X} bytes {}", frame, texture_va, src.base_size + src.mips_size);
   // Development aid: the builds that actually cost something, with what they were, so the time can
   // be pinned on creating the host texture or on the size of the data.
   if (build_ns > 2000000) {
