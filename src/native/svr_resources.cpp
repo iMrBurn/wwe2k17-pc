@@ -1538,6 +1538,11 @@ GuestTexture *SvrResolveTexture(u32 texture_va) {
     check.host = nullptr;
     return TargetWithSameMemory(texture_va);
   }
+  // Which large texture a draw binds in this frame, whether or not it is rebuilt. A movie player
+  // double buffers its planes, so the game's own flip between the two sets is what the picture
+  // actually shows - the [texcad] rebuild lines only say when the decoder's write was seen.
+  if (REXCVAR_GET(svr_log_texture_cadence) && src.base_size + src.mips_size >= 400000)
+    BD_INFO("[texbind] f{} va 0x{:08X}", frame, texture_va);
   u64 sample = 0;
   if (!TextureFullHash() && src.base_size + src.mips_size >= kSampledHashMin) {
     sample = SampleHash(src);
