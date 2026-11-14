@@ -240,6 +240,26 @@ void UntileFace(const MirrorLayout &L, const u8 *face_src, u8 *out, int off_x,
                 int off_y) {
   const u32 source_size = L.source_bytes;
   const int bpb = static_cast<int>(L.bytes_per_block);
+  // An untiled face is already row by row in the guest, so whole rows can be copied instead of one
+  // block at a time. It matters: WWE 2K17 rebuilds two untiled 1280x720 k_8 buffers every frame,
+  // and a k_8 "block" is one byte, so the general loop below ran 921,600 times per rebuild for
+  // 2.4 ms of render thread each. Only taken where a row copy is the same thing byte for byte:
+  // nothing to swap (kNone), or one-byte blocks, which no endian can swap.
+  if (!L.tiled && (L.endian == xe::Endian::kNone || L.bytes_per_block == 1)) {
+    const size_t row_bytes = size_t(L.block_w) * size_t(L.bytes_per_block);
+    for (int by = 0; by < static_cast<int>(L.block_h); ++by) {
+      const i32 so = BaseBlockOffset(L, off_x, off_y + by);
+      if (so < 0 || u32(so) >= source_size)
+        continue;
+      // As in the loop below, a block past the end of the guest data is left as it was (zero):
+      // copy the whole blocks that fit, no more.
+      const size_t fits = ((source_size - u32(so)) / size_t(L.bytes_per_block)) *
+                          size_t(L.bytes_per_block);
+      std::memcpy(out + size_t(by) * L.staging_row_bytes, face_src + so,
+                  std::min(row_bytes, fits));
+    }
+    return;
+  }
   for (int by = 0; by < static_cast<int>(L.block_h); ++by) {
     for (int bx = 0; bx < static_cast<int>(L.block_w); ++bx) {
       const i32 so = BaseBlockOffset(L, off_x + bx, off_y + by);

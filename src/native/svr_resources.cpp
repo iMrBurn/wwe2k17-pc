@@ -1552,11 +1552,26 @@ GuestTexture *SvrResolveTexture(u32 texture_va) {
   }
   const auto build_start = std::chrono::steady_clock::now();
   check.host = GetOrCreateNativeMirror(texture_va, 0);
+  const auto build_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            std::chrono::steady_clock::now() - build_start)
+                            .count();
   g_mirror_builds.fetch_add(1, std::memory_order_relaxed);
-  g_mirror_build_ns.fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                  std::chrono::steady_clock::now() - build_start)
-                                  .count(),
-                              std::memory_order_relaxed);
+  g_mirror_build_ns.fetch_add(build_ns, std::memory_order_relaxed);
+  // Development aid: the builds that actually cost something, with what they were, so the time can
+  // be pinned on creating the host texture or on the size of the data.
+  if (build_ns > 2000000) {
+    static std::atomic<u32> s_logged{0};
+    if (s_logged.fetch_add(1, std::memory_order_relaxed) < 200) {
+      rex::graphics::xenos::xe_gpu_texture_fetch_t f{};
+      ReadFetch(texture_va, f);
+      BD_WARN("[texcost] {:.1f} ms: va 0x{:08X} {}x{} fmt 0x{:X} dim {} tiled {} mips {} "
+              "bytes {} {}",
+              double(build_ns) / 1e6, texture_va, u32(f.size_2d.width) + 1,
+              u32(f.size_2d.height) + 1, u32(f.format), u32(f.dimension), u32(f.tiled),
+              u32(f.mip_max_level) + 1, src.base_size + src.mips_size,
+              check.host ? "built" : "FAILED");
+    }
+  }
   check.hash = hash;
   check.frame = frame;
   check.sample = sample;
