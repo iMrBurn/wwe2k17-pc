@@ -518,3 +518,40 @@ Two sets of four planes (Y 640x640, two chroma 320x320, alpha 640x640) used in t
 buffer, not two movies. So the second suggestion is testable here with what is already logged - the next step is
 to find which set the player considers displayed, and make sure a mirror is never built from the other one.
 
+#### Following the double-buffer lead, and a correction (2026-11-14)
+
+**The movie is 30 Hz, not 15.** The earlier reading here was wrong: a single plane address is rebuilt every
+4 frames, but there are *two* sets of planes used in turn, so the movie's own rate is twice that. The arena
+preview's planes, from `[texcad]` over the moment the user recorded:
+
+- set A: `0xAF1B69E0` and `0xAF1B6B00` (491,392 bytes each), `0xAF1B6A40` and `0xAF1B6AA0` (163,648 each)
+- set B: `0xAF1B6B60` and `0xAF1B6C80` (491,392), `0xAF1B6BC0` and `0xAF1B6C20` (163,648)
+
+Four planes per set, two sets: the Bink player's double buffer, the same shape the F9 draw log showed for the
+Main Event transition. Both renderers run this screen at 60 fps (`Guest pacing` says 60.0 in each), so a 30 Hz
+movie should change picture every 2 render frames exactly.
+
+**What is displayed is the game's own flip, not our rebuild.** `[texcad]` says when the decoder's write was
+*seen*; what the picture shows is which set a draw *binds*. That needed a second line, `[texbind]` (same cvar),
+logging every bind of a texture of 400 KB or more. Measured over the preview, the gaps between set flips:
+
+    1 3 2 1 3 2 2 2 2 2 2 2 1 3
+
+Mostly the expected 2, but about a quarter of the flips come as a **"1 then 3" pair**: one movie frame shown for
+a single render frame, the next for three. That is the judder, and it is visible in the bind pattern.
+
+**And here is the contradiction to resolve before writing any fix.** Which set a draw binds is decided by the
+game's own logic, which is identical in both builds - the renderer does not choose it. If the flip itself is
+uneven, Xenos should judder exactly as much, and the user reports it does not. One of these is wrong: either
+the native build's bind pattern differs from the Xenos build's (which would mean something in our path feeds
+back into the game's timing), or the two were not compared on the same thing.
+
+Note while on the subject: during that capture Xenos had *worse* frame pacing than the native build
+(`max gap` 70.1 ms and 98.7 ms against 18.5-28.9 ms) and was still judged the smooth one, which is a further
+reason to trust the movie's own cadence over frame-time numbers here.
+
+**Next**, and not more guessing: capture both renderers frame by frame on the same scene with RenderDoc 1.46
+(WWE '12 PC's tool), or find the Bink player's own frame counter in the guest and log it beside the render
+frame, which says directly whether a movie frame is skipped or shown twice. Until the contradiction above is
+settled, any change to the mirror path is a shot in the dark - two have been tried today and both missed.
+
