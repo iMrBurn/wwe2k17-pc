@@ -587,3 +587,51 @@ player's own frame counter in the guest logged beside the render frame and besid
 directly whether the two builds bind a different sequence, which is the question that decides where the fix
 goes.
 
+#### 2K16 against 2K17, and a native-only difference in the game's own present (2026-11-14)
+
+The user's own observation closed in on it: he has never had this on WWE '12, 2K15 or 2K16, and WWE '12 PC's
+rendering session says the same. 2K17 is the only one. Since our native renderer came from 2K16 and 2K16's
+source is on this machine, the cheapest next step was a read, not a capture.
+
+**The mirror path is not the difference.** `SvrResolveTexture` in 2K16's `src/native/svr_resources.cpp` and in
+ours are the same function; the whole diff is this session's diagnostics plus the `svr_texture_full_hash`
+condition. Same sampled hash, same rebuild rule, same refill. So nothing in what we do *with* a plane explains
+why 2K17 judders and 2K16 does not.
+
+**What 2K17 has that 2K16 does not** (files present only here): `content_hooks.cpp`, `framerate_hooks.cpp`,
+`memory_hooks.cpp`, `render_hooks.cpp`, `string_tables.cpp`, `text_hooks.cpp`, `universe_stories.cpp`, and the
+D3D11/DXC shader-linking files. Two of those touch timing, and `render_hooks.cpp` holds the find:
+
+```cpp
+#if !defined(SVR_NATIVE_RENDERER)
+// D3DDevice_Swap.
+extern "C" REX_FUNC(sub_82BB2488) {
+  Wwe2k17PacingOnPresent();
+  __imp__sub_82BB2488(ctx, base);
+}
+#endif
+```
+
+**In the Xenos build the game's own `D3DDevice_Swap` still runs** (`__imp__sub_82BB2488`, the only VdSwap
+caller). **In the native build it does not**: re:Blue owns Swap, and `wwe2k17_native_stubs.cpp` only calls
+`Wwe2k17PacingOnPresent` from the renderer's present instead. So the guest's render thread returns from its
+present at a different moment, and under a different rule, in the two builds.
+
+That is the shape of mechanism the measurements asked for: which plane set a draw binds is guest logic, so for
+it to be even in one build and uneven in the other, the guest's *timing* has to differ - and here is a
+native-only change to the guest's present path, the very thing a movie player paces itself against. It also
+fits why frame pacing numbers pointed the wrong way: the native build's frame times are the better ones, but
+its guest present is the altered one.
+
+**Two knobs to test when the machine is free** (both already exist, no code needed):
+
+- `--svr_hooks_off=D3DDevice_Swap` - skips the renderer's side of Swap (`svr_hooks_off` in
+  `wwe2k17_native_stubs.cpp`).
+- `--wwe2k17_render_wait_yield=false` - the other 2K17-only thing on that thread: the ring-wait poll
+  `sub_82BB0C18` is hooked to sleep in 250 us slices after a 150 us spin instead of spinning, which changes
+  when the guest render thread wakes.
+
+Neither needs a human verdict: with `--svr_log_texture_cadence=true` the share of `[texbind]` flips that hold
+2 render frames is the measurement, and the baseline to beat is **69% correct, 31% held 1 or 3**
+(`logs/run-20261114-105051.log`, 211 flips).
+
