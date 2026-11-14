@@ -4,7 +4,35 @@ Unofficial native Windows x64 port of **WWE 2K17 (Xbox 360)**, made by staticall
 
 **This repository contains project code and documentation only. No game data is included or linked.** You need your own copy of the Xbox 360 game and its Title Update 1.04. Please do not ask for game files in the issues.
 
-> **Status: early work in progress.** The game boots and plays its demo matches at 60 fps with the native renderer in Vulkan (`wwe2k17_native.exe`), Direct3D 12 (`wwe2k17_d3d12.exe`) and Direct3D 11 (`wwe2k17_d3d11.exe`), and with the Xbox GPU emulation in Vulkan (`wwe2k17.exe`). A match from the menus is not tested yet. No release.
+> **Status: work in progress, no release yet.** The game boots to its menus and plays a full match at 60 fps with the native renderer in Vulkan (`wwe2k17_native.exe`), Direct3D 12 (`wwe2k17_d3d12.exe`) and Direct3D 11 (`wwe2k17_d3d11.exe`), and with the Xbox GPU emulation in Vulkan (`wwe2k17.exe`).
+
+## What works
+
+- Boots to the menus and plays a match from them, entrances included, at 59-60 fps.
+- 60 fps in the scenes the Xbox 360 locked to 30 (entrances, victory scenes), with an automatic fall back to 30 when the machine cannot hold it.
+- Xbox 360 button prompts rewritten for a PC keyboard and controller.
+- Movies and transition videos play at full rate.
+- The EXIT menu quits the game.
+- DLC packages install from `userdata\dlc_inbox\`.
+
+## Known issues
+
+- **First entrance after a fresh install stutters.** The graphics driver compiles the entrance shaders the first time they are drawn, which can freeze the picture for over a second. They are remembered in `userdata\cache\pipelines.bin` and built at startup from then on, so it happens once.
+- Loading times are not measured yet: the SDK's file I/O statistics are stubbed, so every `[load]` line in the log reads 0.0 MB.
+- Not tested: saves, the creation suite, MyCAREER, and AMD GPUs.
+
+## Options
+
+Pass them on the command line, for example `tools\run.ps1 --wwe2k17_60fps=false`.
+
+| Option | Default | What it does |
+|---|---|---|
+| `wwe2k17_60fps` | `true` | 60 fps in the scenes the Xbox 360 locked to 30 |
+| `wwe2k17_60fps_auto` | `true` | falls back to 30 in those scenes when the machine cannot hold 60 |
+| `wwe2k17_pc_texts` | `true` | PC button prompts instead of the Xbox 360 ones |
+| `wwe2k17_exit_menu` | `true` | adds a quit entry to the in-game menu |
+| `wwe2k17_shadows` | `true` | character shadows |
+| `wwe2k17_universe_stories_unlocked` | `true` | Universe: the Story Collection reads as fully played, clues revealed (nothing is written to your save) |
 
 ## Building
 
