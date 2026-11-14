@@ -1033,6 +1033,15 @@ GuestShader *SvrLookupShader(u32 shader_va) {
 #endif
 }
 
+namespace {
+// Defined with the declaration store below: keeps a declaration for the next sessions.
+void RememberDeclaration(const GuestVertexDeclaration *decl);
+}  // namespace
+
+// WWE 2K17 calls D3DDevice_CreateVertexDeclaration, so its declarations arrive here rather than
+// through the WWE12_NO_CREATE_SHADERS path. Remember them too, otherwise declarations.bin stays
+// empty and the pipelines remembered from the last session cannot be built at startup for want of
+// their declaration ("N declaration(s) not known yet" in the boot line).
 void SvrOnVertexDeclarationCreated(u32 decl_va, u32 elements_va) {
   if (!decl_va || !elements_va)
     return;
@@ -1049,11 +1058,17 @@ void SvrOnVertexDeclarationCreated(u32 decl_va, u32 elements_va) {
   }
   const u64 hash =
       XXH3_64bits(normalized.data(), normalized.size() * sizeof(GuestVertexElement));
-  std::unique_lock lock(g_object_mutex);
-  GuestVertexDeclaration *&host = g_decls_by_hash[hash];
-  if (!host)
-    host = CreateVertexDeclaration(normalized.data());
-  g_decls[decl_va] = host;
+  GuestVertexDeclaration *made = nullptr;
+  {
+    std::unique_lock lock(g_object_mutex);
+    GuestVertexDeclaration *&host = g_decls_by_hash[hash];
+    if (!host)
+      made = host = CreateVertexDeclaration(normalized.data());
+    g_decls[decl_va] = host;
+  }
+  // Outside g_object_mutex: RememberDeclaration takes the store's own lock and writes the file.
+  if (made)
+    RememberDeclaration(made);
 }
 
 #if defined(WWE12_NO_CREATE_SHADERS)
