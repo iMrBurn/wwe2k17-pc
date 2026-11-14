@@ -445,3 +445,39 @@ and tiled faces keep the general loop. Measured on the attract loop:
 
 The two that remain are tiled 512x512 mirrors (1-2 MB), which take the general loop as they must.
 
+### Movie smoothness in the native renderer: open, with four causes ruled out (2026-11-14)
+
+After the texture copy fix above the render thread is healthy (worst second 32 ms of texture work instead of
+110, one 29 ms hitch per ten seconds), and the user still reports the movies as not smooth. The scene he judges
+by is the **arena preview** on the match setup screen (WWE Superstars), a full-screen Bink movie.
+
+**The one solid comparison.** The same arena preview on `wwe2k17.exe` (Xenos emulation) is smooth; on
+`wwe2k17_native.exe` it is not. Same game, same movie, same machine: the fault is in the native path.
+
+**Ruled out, each by a flag and a look, none of them it:**
+
+| suspect | flag | result |
+|---|---|---|
+| the sampled change detection misses plane updates | `svr_texture_full_hash=true` | no change on screen, and the rebuild count per plane does not move, so nothing is missed |
+| the in-place refill overwrites a plane the other in-flight frame still reads | `svr_texture_refill=false` | no change |
+| the 60 fps hook unsettles the movie clock | `wwe2k17_60fps=false` | no change |
+| the mirror pool / creation cost | (see the section above) | reverted, no gain |
+
+**What is measured** (`svr_log_texture_cadence`, new): the preview's planes are rebuilt every 4 frames at
+60 fps, so the movie runs at **15 Hz**, and none of its updates are lost. The gaps are not even though: for the
+small chroma planes, 14 gaps of 4 against 10 of 3 or 5; for the big 491 KB luma plane, runs of **3 then 1**
+frame. A rebuild one frame after another means the plane was mirrored twice for one movie frame, which is what
+catching the decoder's write part way through would look like - and the bigger plane takes longer to write,
+which is why only it shows the pattern.
+
+**An attempt that made it worse, and is not in the tree.** Acting on that reading, a "settle" rule mirrored a
+repeatedly-changing texture only once its content had held for a frame (at most two frames of waiting). The
+user's verdict was immediate: *"c'est encore pire"*. Reverted. Either the tearing is not what he sees, or a
+frame of latency on the movie costs more than the torn frame does.
+
+**Where to look next.** Not at the change detection, the refill, the frame rate or the build cost - those are
+measured and clean. The difference between the two renderers is *when* the plane's bytes are read: the Xenos
+path reads guest memory as the GPU executes, a frame after we snapshot it into a mirror. The next thing worth
+measuring is the native presented cadence against Xenos on the same scene with a frame-accurate capture, since
+the screen recordings compared so far (30 fps, lossy) could not separate 15 Hz from 30 Hz reliably.
+
