@@ -380,3 +380,38 @@ Method worth keeping: F9 logs the next frame's draws (`src/native/svr_draw_log.c
 does the same by frame index), and it reads the guest's own register shadows, so it says what the game asked
 for rather than what we did with it. And before chasing a renderer difference, sample both recordings at the
 *same* moment of the *same* scene: the attract loop plays several different movies.
+
+### Everything prepared at the first start (2026-11-14)
+
+The user's call for the 0.1: the first start should do the graphics work once so a player is left alone
+afterwards. The machinery was already there and half connected.
+
+**The gap.** `svr_pso_boot_objects` builds the shaders and vertex declarations of the remembered pipelines at
+startup so the pipelines are compiled in the background before any draw needs them. Its boot line said
+`0 vertex declaration(s) made at startup ... (13 declaration(s) not known yet)`, and `userdata/cache/declarations.bin`
+never appeared. The reason: `RememberDeclaration` was only called from the `WWE12_NO_CREATE_SHADERS` path,
+because WWE '12 builds its `D3DVertexDeclaration` objects itself. WWE 2K17 calls
+`D3DDevice_CreateVertexDeclaration`, so its declarations arrive through `SvrOnVertexDeclarationCreated`, which
+did not remember them. Without the declaration a remembered pipeline cannot be built at startup, so it was
+compiled on the render thread at its first draw - a stutter on each new screen.
+
+Calling `RememberDeclaration` there too (outside `g_object_mutex`: the store takes its own lock and writes the
+file) fixes it. Measured on the attract loop with the same `pipelines.bin`:
+
+| | declarations made at startup | not known yet | render-thread compiles |
+|---|---|---|---|
+| before | 0 | 13 | 9 |
+| after | 13 | 0 | 0 |
+
+**Shipping it.** `tools/package.ps1` (new) builds `dist/WWE2K17-PC` with the four renderers, their settings and
+libraries, the launcher when one is built, and the two seed caches from the developer's machine copied as
+`pipelines_seed.w12p` and `declarations_seed.w12d`, which `ReplayBootCache` loads beside the per-player
+`userdata/cache/pipelines.bin`. Same recipe as WWE '12 PC. The script copies nothing from `game/`, `game_tu/`
+or `userdata/title_update/` and refuses to finish if a game file ends up in the folder. The package is about
+440 MB, nearly all of it the four recompiled exes (100-110 MB each).
+
+**What the seed still needs.** It only holds what this machine has drawn. To cover a player's first hours the
+seed should be grown by exercising the game once across the menus, the creation suite, Universe and a match
+with entrances, then re-packaging. That doubles as the first test of the parts never tried (saves, creation
+suite, MyCAREER).
+
