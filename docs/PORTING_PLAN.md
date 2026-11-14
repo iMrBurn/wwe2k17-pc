@@ -555,3 +555,35 @@ reason to trust the movie's own cadence over frame-time numbers here.
 frame, which says directly whether a movie frame is skipped or shown twice. Until the contradiction above is
 settled, any change to the mirror path is a shot in the dark - two have been tried today and both missed.
 
+#### The contradiction is real, confirmed on the same arena (2026-11-14)
+
+Re-run deliberately: the same screen, the same arena (WWE Superstars), about a minute of watching on each
+build, one after the other, with the instruction to watch the moving background rather than a still logo.
+Verdict unchanged - `wwe2k17.exe` (Xenos) smooth, `wwe2k17_native.exe` not.
+
+The native side was measured over that exact viewing (`[texbind]`, `logs/run-20261114-105051.log`):
+
+| flips of the movie's double buffer | 211 |
+|---|---|
+| held the expected 2 render frames | 146 (69%) |
+| held 1 or 3 instead | **65 (31%)** |
+
+So nearly a third of the movie's frames are shown for the wrong length of time, and the user sees it. The same
+instrument cannot be pointed at the Xenos build - `svr_resources.cpp` is the native renderer's - so for that
+side the comparison rests on the user's eye, which is why the protocol was made strict.
+
+**What this rules in.** Which plane set a draw binds comes out of the game's own logic, which is the same
+recompiled code in both builds. For the bind pattern to be uneven in one and not the other, something in the
+native path has to feed back into the game's own timing. That is now the thing to find, and it is a different
+question from everything tried so far (change detection, refill, build cost, frame rate hook) - all of which
+asked what we do with a plane *after* the game chose it.
+
+**What it rules out as the mechanism:** frame pacing. During the same captures the Xenos build had the *worse*
+pacing of the two (`max gap` 70.1 and 98.7 ms against 18.5-28.9 ms) and is the smooth one. So the native
+build's advantage in frame times is not what matters here, and a fix aimed at frame times would miss.
+
+**Next instrument, not more hypotheses:** RenderDoc 1.46 on both builds over the same preview, or the Bink
+player's own frame counter in the guest logged beside the render frame and beside `[texbind]`. Either one says
+directly whether the two builds bind a different sequence, which is the question that decides where the fix
+goes.
+
