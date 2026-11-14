@@ -304,7 +304,7 @@ where the two freezes are: 1448 ms and 798 ms, plus a window with 34 frames over
 the measurement I could not make earlier and it should be made now: play the same match again and count the
 "render-thread compile (miss, not in residual)" lines and the freezes.
 
-### Transition videos: wrong in the native renderer (2026-11-13, user report, not fixed)
+### Transition videos: the native renderer was cleared (2026-11-13 report, re-checked 2026-11-14)
 
 The user reported "mini visual bugs" on the transition videos, like the intro. Compared the same attract transition
 (the smoke sweep that ends the demo match and brings up the WWE / 2K17 logo) in both renderers, recorded with
@@ -359,3 +359,24 @@ played in order to schedule the next one, so a thread-local counter around it ma
 answer while that call is on the stack. Off with `wwe2k17_universe_stories_unlocked = false`.
 
 Tested 2026-11-14 on `wwe2k17_native.exe`: counters full, no category greyed, a story can be picked, no crash.
+
+**2026-11-14: the comparison above was not like for like.** The two recordings were sampled at different
+moments: `nat_rec.mp4` around 31-33 s is the smoke sweep over the demo match, while `xen_rec.mp4` around
+39-41 s is a different clip (the standalone WWE logo movie on a black background). Re-sampled at the same
+moment of the same transition (`xen_rec.mp4` 53-56 s against `nat_rec.mp4` 30-34 s), the two renderers agree:
+both wash the whole picture with thick grey smoke, both show the dark, hard-edged W silhouette in the middle of
+the sweep, and both finish on a clean WWE / 2K17 logo. The "flat grey wash" and the "blocky black edges" are
+what the transition looks like, not a native-renderer fault.
+
+The draw log confirms the native path handles it properly. The user pressed F9 during the Main Event
+transition (`logs/run-20261114-092437.log`): the frame is two draws, one per Bink movie composited on top of
+each other, and each binds **four** planes - Y 640x640, two chroma 320x320 and an **alpha plane** 640x640 - all
+mirrored as R8_UNORM with swizzle (R,R,R,1). The guest blend register is 0x07060706, i.e. plain
+SRC_ALPHA / INV_SRC_ALPHA on both colour and alpha, with alpha test GEQUAL 0.004. The alpha plane asks for
+POINT filtering where the other three ask for LINEAR, and `sampler_cache.cpp` honours that per fetch constant.
+No texture was rejected and no shader warning was logged.
+
+Method worth keeping: F9 logs the next frame's draws (`src/native/svr_draw_log.cpp`, `SVR_DRAW_LOG=<frame>`
+does the same by frame index), and it reads the guest's own register shadows, so it says what the game asked
+for rather than what we did with it. And before chasing a renderer difference, sample both recordings at the
+*same* moment of the *same* scene: the attract loop plays several different movies.
