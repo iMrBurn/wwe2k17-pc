@@ -415,3 +415,33 @@ seed should be grown by exercising the game once across the menus, the creation 
 with entrances, then re-packaging. That doubles as the first test of the parts never tried (saves, creation
 suite, MyCAREER).
 
+### The stutter was the texture copy, not the pipelines (2026-11-14)
+
+The user recorded the RAW transition and said it was not smooth. The log of that exact minute agreed:
+59.6-60 fps throughout, but one frame at **53.9 ms**, and the time was in render-thread *work*, not in a GPU
+wait. With the pipelines now built at startup (above), the `[load]` lines pointed straight at textures - and at
+something odd: one second built 92 mirrors in 18 ms while another built 90 in 143 ms. Same count, eight times
+the time, so it was *which* textures, not how many.
+
+**A wrong turn worth recording.** The first guess was that creating a host texture, its view and a bindless
+slot was the cost, and that dropped mirrors should be pooled and refilled like the movie planes. Built and
+measured: per-build time barely moved (0.59 -> 0.53 ms) and the worst frame got *worse*. Reverted. The lesson
+is the cheap one: measure the thing itself before building the fix.
+
+**What it was.** A `[texcost]` line (kept, in `SvrResolveTexture`: any build over 2 ms with the texture's size,
+format and tiling) showed the same two addresses over and over - untiled **1280x720 k_8** buffers, 900 KB,
+rebuilt every frame at 2.4 ms each. `UntileFace` walked the face block by block, calling `BaseBlockOffset` and
+`CopySwapBlock` per block. A k_8 block is **one byte**, so each rebuild ran that loop 921,600 times to copy
+900 KB.
+
+An untiled face is already row by row in the guest, so whole rows can be copied. The fast path is taken only
+where that is the same thing byte for byte - `Endian::kNone`, or one-byte blocks, which no endian can swap -
+and tiled faces keep the general loop. Measured on the attract loop:
+
+| | per texture build | worst second | builds over 2 ms |
+|---|---|---|---|
+| before | 0.63 ms | 97 textures in 110 ms | 200 |
+| after | **0.09 ms** | 92 textures in **20 ms** | 2 (both tiled 512x512) |
+
+The two that remain are tiled 512x512 mirrors (1-2 MB), which take the general loop as they must.
+
