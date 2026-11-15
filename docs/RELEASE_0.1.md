@@ -18,8 +18,9 @@ These are the ones that would make a release pointless if they are broken. All n
       **Open: on the superstar select screen the character's render is a black silhouette** ("SUPERSTAR /
       OVERALL 79" over a dark figure). No warning or rejected texture in the log. Not yet known whether it hits
       every wrestler or only the edited one, nor whether `wwe2k17.exe` (Xenos) shows it. Next: F9 on that
-      screen (draw log of the frame), and the same screen on the Xenos build. Still to check: that the created
-      attire is there after a relaunch.
+      screen (draw log of the frame), and the same screen on the Xenos build. The user says the silhouette is CAW-only
+      (normal superstars render fine). That the created attire is still there after a relaunch was **not
+      checked**: the user chose to accept it as fine on 2026-11-15, and the game did write `00CustomSuperStar.cas`.
 - [ ] **MyCAREER** and the rest of **Universe** (the Story Collection is done and working): do they start, do
       they survive a few minutes.
 - [ ] **A real match from the menus on each of the four exes.** One has been played on `wwe2k17_native.exe`;
