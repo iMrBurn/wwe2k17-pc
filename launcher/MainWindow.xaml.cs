@@ -49,16 +49,27 @@ public partial class MainWindow : Window
     };
     static readonly Engine[] Engines =
     {
-        new("native", "NATIF · VULKAN", "wwe2k17_native.exe", true, "Rendu natif Vulkan : le plus rapide et le plus complet (recommandé)."),
+        new("native", "NATIF · VULKAN", "wwe2k17_native.exe", true, "Rendu natif Vulkan : le plus rapide (recommandé). Les vidéos plein écran sont un peu saccadées."),
         new("d3d12", "NATIF · DIRECT3D 12", "wwe2k17_d3d12.exe", true, "Rendu natif Direct3D 12 : essaie-le si Vulkan pose problème avec ta carte."),
         new("d3d11", "NATIF · DIRECT3D 11", "wwe2k17_d3d11.exe", true, "Rendu natif Direct3D 11 : pour les vieilles cartes graphiques."),
-        new("xenos", "ÉMULATION XENOS", "wwe2k17.exe", false, "Émulation de la puce de la Xbox 360 : plus lente, sert de référence."),
+        new("xenos", "ÉMULATION XENOS", "wwe2k17.exe", false, "Émulation de la puce de la Xbox 360 : le plus fidèle, joue les vidéos correctement, mais plus lent."),
     };
     // Internal heights of the native renderer (svr_render_scale); 0 = automatic from the screen and the GPU.
     static readonly int[] InternalHeights = { 0, 540, 720, 1080, 1440, 2160 };
     static readonly string[] AaNames = { "NON", "OUI", "FORT" };
     static string OnOff(bool b) => b ? "OUI" : "NON";
     List<string> gpuNames = new();
+
+    // The launcher speaks the game's language (Loc.cs). Texts are written in French in the code and translated here.
+    string Tr(string fr) => Loc.T(fr, cfg.Language);
+    string Tr(string fr, params object[] args) => string.Format(Loc.T(fr, cfg.Language), args);
+
+    void ApplyLanguage()
+    {
+        PromptSelect.Text = Tr("SÉLECTIONNER");
+        PromptBack.Text = Tr("RETOUR");
+        RefreshChecks();
+    }
 
     Engine CurrentEngine => Engines.FirstOrDefault(e => e.Id == cfg.Engine) ?? Engines[0];
     string EnginePath(Engine e) => Path.Combine(exeDir, e.Exe);
@@ -123,7 +134,7 @@ public partial class MainWindow : Window
         tick.Start();
 
         loading = false;
-        RefreshChecks();
+        ApplyLanguage();
         LoadGpuNames();
         Loaded += (_, _) => { Focus(); ShowScreen("main"); };
     }
@@ -150,12 +161,14 @@ public partial class MainWindow : Window
     void LoadSettings()
     {
         settingsPath = Path.Combine(root, "userdata", "launcher.json");
+        bool firstRun = !File.Exists(settingsPath);
         try
         {
-            if (File.Exists(settingsPath))
+            if (!firstRun)
                 cfg = JsonSerializer.Deserialize<LauncherSettings>(File.ReadAllText(settingsPath)) ?? new();
         }
         catch { cfg = new(); }
+        if (firstRun) cfg.Language = Loc.FromSystem();   // the player's Windows language, until they pick one
         if (!Resolutions.Contains(cfg.Resolution)) cfg.Resolution = "1600x900";
         if (!Languages.Any(l => l.Key == cfg.Language)) cfg.Language = "english";
         cfg.Scale = Math.Clamp(cfg.Scale, 1, 3);
@@ -207,6 +220,8 @@ public partial class MainWindow : Window
     Item Add(string label, string info, Action run, Func<string>? get = null, Action<int>? change = null,
              Func<bool>? enabled = null, bool text = false)
     {
+        label = Tr(label);
+        info = Tr(info);
         var l = new TextBlock { Text = label, FontSize = 18, VerticalAlignment = VerticalAlignment.Center };
         var v = new TextBlock { FontSize = 16, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
         var g = new Grid { Margin = new Thickness(12, 0, 12, 0) };
@@ -251,14 +266,14 @@ public partial class MainWindow : Window
         LogoBox.Visibility = name == "main" ? Visibility.Visible : Visibility.Collapsed;
         switch (name)
         {
-            case "settings": BuildSettings(); ScreenTitle.Text = "PARAMÈTRES"; break;
-            case "display": BuildDisplay(); ScreenTitle.Text = "AFFICHAGE"; break;
-            case "graphics": BuildGraphics(); ScreenTitle.Text = "GRAPHISMES"; break;
-            case "gameopts": BuildGameOptions(); ScreenTitle.Text = "JEU"; break;
-            case "files": BuildFiles(); ScreenTitle.Text = "FICHIERS DU JEU"; break;
-            case "dlc": BuildDlc(); ScreenTitle.Text = "CONTENU TÉLÉCHARGEABLE"; break;
-            case "diag": BuildDiag(); ScreenTitle.Text = "DIAGNOSTIC"; break;
-            default: BuildMain(); ScreenTitle.Text = "MENU PRINCIPAL"; break;
+            case "settings": BuildSettings(); ScreenTitle.Text = Tr("PARAMÈTRES"); break;
+            case "display": BuildDisplay(); ScreenTitle.Text = Tr("AFFICHAGE"); break;
+            case "graphics": BuildGraphics(); ScreenTitle.Text = Tr("GRAPHISMES"); break;
+            case "gameopts": BuildGameOptions(); ScreenTitle.Text = Tr("JEU"); break;
+            case "files": BuildFiles(); ScreenTitle.Text = Tr("FICHIERS DU JEU"); break;
+            case "dlc": BuildDlc(); ScreenTitle.Text = Tr("CONTENU TÉLÉCHARGEABLE"); break;
+            case "diag": BuildDiag(); ScreenTitle.Text = Tr("DIAGNOSTIC"); break;
+            default: BuildMain(); ScreenTitle.Text = Tr("MENU PRINCIPAL"); break;
         }
         Select(selByScreen.TryGetValue(name, out var s) ? s : 0);
         Keyboard.ClearFocus();
@@ -270,7 +285,7 @@ public partial class MainWindow : Window
     void BuildMain()
     {
         Add("JOUER", "Lance WWE 2K17 avec tes paramètres.", Play, enabled: () => (hasExe && setup.HasGame && !busy) || proc != null)
-            .Label.Text = proc != null ? "ARRÊTER LE JEU" : "JOUER";
+            .Label.Text = Tr(proc != null ? "ARRÊTER LE JEU" : "JOUER");
         Add("PARAMÈTRES", "Affichage, graphismes, langue, son et manette.", () => ShowScreen("settings"));
         Add("FICHIERS DU JEU", "Installe le jeu depuis ton ISO, ajoute le Title Update 1.04, ouvre les dossiers.", () => ShowScreen("files"));
         Add("DLC", "Ajoute ou retire les contenus téléchargeables (DLC).", () => ShowScreen("dlc"));
@@ -349,11 +364,13 @@ public partial class MainWindow : Window
 
     void BuildGameOptions()
     {
-        Add("LANGUE DU JEU", "Langue des textes du jeu (le launcher reste en français).", () => { },
+        Add("LANGUE DU JEU", "Langue des textes du jeu. Le launcher change de langue avec elle.", () => { },
             () => Languages.First(l => l.Key == cfg.Language).Name, d =>
             {
                 int i = Array.FindIndex(Languages, l => l.Key == cfg.Language);
                 cfg.Language = Languages[(i + d + Languages.Length) % Languages.Length].Key;
+                ApplyLanguage();
+                Rebuild();           // every label is redrawn in the new language
             });
         Add("60 IMAGES/S", "Entrées, victoires, rediffusions et cinématiques à 60 images/s au lieu de 30 comme sur Xbox 360.", () => { },
             () => OnOff(cfg.Fps60), _ => cfg.Fps60 = !cfg.Fps60);
@@ -408,7 +425,7 @@ public partial class MainWindow : Window
         {
             var d1 = d;
             Add(d.DisplayName.Length > 0 ? d.DisplayName.ToUpperInvariant() : d.Name.ToUpperInvariant(),
-                $"{d.SizeBytes / 1048576} Mo installés. Entrée pour retirer ce DLC.", () => RemoveDlc(d1), () => "INSTALLÉ", enabled: () => !busy);
+                Tr("{0} Mo installés. Entrée pour retirer ce DLC.", d.SizeBytes / 1048576), () => RemoveDlc(d1), () => "INSTALLÉ", enabled: () => !busy);
         }
         if (installed.Count == 0) { /* nothing yet: the info line explains */ }
         Back();
@@ -435,7 +452,7 @@ public partial class MainWindow : Window
         it.Value.Foreground = on ? fg : (it.ValueColor ?? fg);
         if (it.IsText && extraBox != null) extraBox.Foreground = Brushes.White;
         if (it.Get != null)
-            it.Value.Text = (on && it.Change != null ? "◄  " : "") + it.Get() + (on && it.Change != null ? "  ►" : "");
+            it.Value.Text = (on && it.Change != null ? "◄  " : "") + Tr(it.Get()) + (on && it.Change != null ? "  ►" : "");
     }
 
     void Select(int i)
@@ -444,7 +461,7 @@ public partial class MainWindow : Window
         sel = Math.Clamp(i, 0, items.Count - 1);
         for (int k = 0; k < items.Count; k++) StyleItem(items[k], k == sel);
         InfoText.Text = items[sel].Info;
-        if (screen == "dlc" && sel == 2 && items.Count == 3) InfoText.Text = "Aucun DLC installé pour l'instant.";
+        if (screen == "dlc" && sel == 2 && items.Count == 3) InfoText.Text = Tr("Aucun DLC installé pour l'instant.");
     }
 
     void Activate(Item it, int dir)
@@ -489,16 +506,16 @@ public partial class MainWindow : Window
         Checks.Children.Clear();
         hasExe = File.Exists(EnginePath(CurrentEngine));
         updateState = setup.CheckUpdate();
-        AddCheck("MOTEUR", hasExe);
-        AddCheck("DONNÉES DU JEU", setup.HasGame);
+        AddCheck(Tr("MOTEUR"), hasExe);
+        AddCheck(Tr("DONNÉES DU JEU"), setup.HasGame);
         AddCheck("TITLE UPDATE 1.04", updateState == GameSetup.UpdateState.Ok);
         if (!busy)
         {
-            if (!hasExe) StatusText.Text = "Le moteur n'est pas compilé : lance tools\\build.ps1.";
-            else if (!setup.HasGame) StatusText.Text = "Le jeu n'est pas installé : va dans FICHIERS DU JEU.";
-            else if (updateState == GameSetup.UpdateState.Missing) StatusText.Text = "Il manque le Title Update 1.04 : va dans FICHIERS DU JEU.";
+            if (!hasExe) StatusText.Text = Tr("Le moteur n'est pas compilé : lance tools\\build.ps1.");
+            else if (!setup.HasGame) StatusText.Text = Tr("Le jeu n'est pas installé : va dans FICHIERS DU JEU.");
+            else if (updateState == GameSetup.UpdateState.Missing) StatusText.Text = Tr("Il manque le Title Update 1.04 : va dans FICHIERS DU JEU.");
             else if (updateState == GameSetup.UpdateState.Wrong)
-                StatusText.Text = "Ce n'est pas le Title Update 1.04 : le moteur est fait pour la 1.04, réinstalle-la dans FICHIERS DU JEU.";
+                StatusText.Text = Tr("Ce n'est pas le Title Update 1.04 : le moteur est fait pour la 1.04, réinstalle-la dans FICHIERS DU JEU.");
         }
     }
 
@@ -506,41 +523,50 @@ public partial class MainWindow : Window
     IEnumerable<(string Label, string Value, bool Ok, string Info)> DiagLines()
     {
         int built = Engines.Count(e => File.Exists(EnginePath(e)));
-        yield return ("MOTEURS GRAPHIQUES", built + " / " + Engines.Length, File.Exists(EnginePath(CurrentEngine)),
-            "Moteurs compilés : " + string.Join(", ", Engines.Where(e => File.Exists(EnginePath(e))).Select(e => e.Name.ToLowerInvariant())) + ".");
-        yield return ("DONNÉES DU JEU", setup.HasGame ? "PRÉSENTES" : "ABSENTES", setup.HasGame, "Dossier game\\ avec default.xex.");
-        yield return ("TITLE UPDATE", updateState switch
+        // everything is translated here, so the report can be built in English whatever the launcher language
+        yield return (Tr("MOTEURS GRAPHIQUES"), built + " / " + Engines.Length, File.Exists(EnginePath(CurrentEngine)),
+            Tr("Moteurs compilés : {0}.", string.Join(", ", Engines.Where(e => File.Exists(EnginePath(e))).Select(e => Tr(e.Name).ToLowerInvariant()))));
+        yield return (Tr("DONNÉES DU JEU"), Tr(setup.HasGame ? "PRÉSENTES" : "ABSENTES"), setup.HasGame, Tr("Dossier game\\ avec default.xex."));
+        yield return (Tr("TITLE UPDATE"), Tr(updateState switch
         {
             GameSetup.UpdateState.Ok => "1.04",
             GameSetup.UpdateState.Wrong => "MAUVAISE VERSION",
             _ => "ABSENT",
-        }, updateState == GameSetup.UpdateState.Ok, "Le moteur est compilé pour la version 1.04 du Title Update.");
+        }), updateState == GameSetup.UpdateState.Ok, Tr("Le moteur est compilé pour la version 1.04 du Title Update."));
         int dlcCount; try { dlcCount = dlc.List().Count; } catch { dlcCount = 0; }
-        yield return ("DLC INSTALLÉS", dlcCount + " / 6", true, "Les contenus téléchargeables installés dans userdata.");
+        yield return (Tr("DLC INSTALLÉS"), dlcCount + " / 6", true, Tr("Les contenus téléchargeables installés dans userdata."));
         long freeGb = 0;
         try { freeGb = new DriveInfo(Path.GetPathRoot(root)!).AvailableFreeSpace >> 30; } catch { }
         double ramGb = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1073741824.0;
-        yield return ("PC", $"{ramGb:0.#} GO RAM · {freeGb} GO LIBRES", ramGb >= 7.5 && freeGb >= 5,
-            "Mémoire vive (8 Go minimum conseillés) et place libre sur le disque du jeu (les caches de shaders grossissent).");
-        yield return ("CARTE GRAPHIQUE", gpuNames.Count == 0 ? "?" : gpuNames[0].ToUpperInvariant(), gpuNames.Count > 0,
-            gpuNames.Count > 1 ? "Cartes vues : " + string.Join(", ", gpuNames) : "Carte détectée par Windows.");
+        yield return ("PC", Tr("{0} GO RAM · {1} GO LIBRES", ramGb.ToString("0.#"), freeGb), ramGb >= 7.5 && freeGb >= 5,
+            Tr("Mémoire vive (8 Go minimum conseillés) et place libre sur le disque du jeu (les caches de shaders grossissent)."));
+        yield return (Tr("CARTE GRAPHIQUE"), gpuNames.Count == 0 ? "?" : gpuNames[0].ToUpperInvariant(), gpuNames.Count > 0,
+            gpuNames.Count > 1 ? Tr("Cartes vues : {0}", string.Join(", ", gpuNames)) : Tr("Carte détectée par Windows."));
     }
 
+    // Always in English, so whoever reads it can follow it whatever language the player uses.
     string BuildReport()
+    {
+        Loc.Force = "english";
+        try { return BuildReportText(); }
+        finally { Loc.Force = null; }
+    }
+
+    string BuildReportText()
     {
         var sb = new System.Text.StringBuilder();
         string ver = File.Exists(Path.Combine(root, "VERSION")) ? File.ReadAllText(Path.Combine(root, "VERSION")).Trim() : "?";
         sb.AppendLine($"WWE 2K17 PC {ver} · launcher 0.5 · {DateTime.Now:yyyy-MM-dd HH:mm}");
         sb.AppendLine($"Windows {Environment.OSVersion.Version} · {Environment.ProcessorCount} threads");
         foreach (var (label, value, _, _) in DiagLines()) sb.AppendLine($"{label}: {value}");
-        foreach (var e in Engines) sb.AppendLine($"  {e.Exe}: {(File.Exists(EnginePath(e)) ? "présent" : "absent")}{(e.Id == cfg.Engine ? " (choisi)" : "")}");
-        sb.AppendLine($"Réglages: moteur {cfg.Engine}, {cfg.Resolution}, plein écran {cfg.Fullscreen}, V-Sync {cfg.VSync}, " +
-                      $"interne {(CurrentEngine.Native ? (cfg.Internal == 0 ? "auto" : cfg.Internal + "p") : cfg.Scale + "x")}, AA {cfg.Aa}, " +
-                      $"upscaler {cfg.Upscaler}, aniso {cfg.Aniso}, 60 ips {cfg.Fps60}, ombres {cfg.Shadows}, langue {cfg.Language}, gpu '{cfg.Gpu}'");
+        foreach (var e in Engines) sb.AppendLine($"  {e.Exe}: {(File.Exists(EnginePath(e)) ? "present" : "missing")}{(e.Id == cfg.Engine ? " (selected)" : "")}");
+        sb.AppendLine($"Settings: engine {cfg.Engine}, {cfg.Resolution}, fullscreen {cfg.Fullscreen}, V-Sync {cfg.VSync}, " +
+                      $"internal {(CurrentEngine.Native ? (cfg.Internal == 0 ? "auto" : cfg.Internal + "p") : cfg.Scale + "x")}, AA {cfg.Aa}, " +
+                      $"upscaler {cfg.Upscaler}, aniso {cfg.Aniso}, 60 fps {cfg.Fps60}, shadows {cfg.Shadows}, language {cfg.Language}, gpu '{cfg.Gpu}'");
         var log = LastLog();
         if (log != null)
         {
-            sb.AppendLine($"--- {Path.GetFileName(log)} (dernières lignes) ---");
+            sb.AppendLine($"--- {Path.GetFileName(log)} (last lines) ---");
             try
             {
                 using var fs = new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
@@ -566,15 +592,15 @@ public partial class MainWindow : Window
 
     void CopyReport()
     {
-        try { Clipboard.SetText(BuildReport()); StatusText.Text = "Rapport copié : colle-le dans ton message."; }
+        try { Clipboard.SetText(BuildReport()); StatusText.Text = Tr("Rapport copié : colle-le dans ton message."); }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or InvalidOperationException)
-        { StatusText.Text = "Impossible de copier : " + ex.Message; }
+        { StatusText.Text = Tr("Impossible de copier : {0}", ex.Message); }
     }
 
     void OpenLastLog()
     {
         var log = LastLog();
-        if (log == null) { StatusText.Text = "Aucun journal pour l'instant : lance le jeu une fois."; return; }
+        if (log == null) { StatusText.Text = Tr("Aucun journal pour l'instant : lance le jeu une fois."); return; }
         Process.Start(new ProcessStartInfo("notepad.exe", $"\"{log}\"") { UseShellExecute = true });
     }
 
@@ -616,7 +642,7 @@ public partial class MainWindow : Window
         jobCancel = new CancellationTokenSource();
         ProgressTrack.Visibility = Visibility.Visible;
         ProgressFill.Width = 0;
-        StatusText.Text = label + " (Échap pour annuler)";
+        StatusText.Text = Tr("{0} (Échap pour annuler)", label);
         double lastShown = -1;
         void Progress(long done, long total)
         {
@@ -626,81 +652,80 @@ public partial class MainWindow : Window
             Dispatcher.BeginInvoke(() =>
             {
                 ProgressFill.Width = ProgressTrack.Width * Math.Clamp(f, 0, 1);
-                StatusText.Text = $"{label} : {f * 100:0}%  (Échap pour annuler)";
+                StatusText.Text = Tr("{0} : {1}%  (Échap pour annuler)", label, (f * 100).ToString("0"));
             });
         }
         string result;
         try
         {
             var token = jobCancel.Token;
-            result = await Task.Run(() => work(Progress, token)) ?? "Terminé.";
+            result = await Task.Run(() => work(Progress, token)) ?? Tr("Terminé.");
         }
-        catch (OperationCanceledException) { result = "Annulé."; }
+        catch (OperationCanceledException) { result = Tr("Annulé."); }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
-        { result = "Erreur : " + ex.Message; }
+        { result = Tr("Erreur : {0}", Tr(ex.Message)); }
         busy = false;
         jobCancel = null;
         ProgressTrack.Visibility = Visibility.Collapsed;
-        StatusText.Text = result;
         RefreshChecks();
-        if (!StatusText.Text.StartsWith("Erreur")) StatusText.Text = result;
+        StatusText.Text = result;
         Rebuild();
     }
 
     void InstallIso()
     {
-        var dlg = new OpenFileDialog { Title = "Choisis l'image disque de WWE 2K17", Filter = "Image disque Xbox 360 (*.iso)|*.iso|Tous les fichiers|*.*" };
+        var dlg = new OpenFileDialog { Title = Tr("Choisis l'image disque de WWE 2K17"), Filter = Tr("Image disque Xbox 360") + " (*.iso)|*.iso|" + Tr("Tous les fichiers") + "|*.*" };
         if (dlg.ShowDialog(this) != true) return;
         if (!ConfirmOverwrite()) return;
         string iso = dlg.FileName;
-        RunJob("Extraction du disque", (p, ct) => { setup.InstallIso(iso, p, ct); return "Jeu installé dans game\\. Ajoute maintenant le Title Update 2."; });
+        RunJob(Tr("Extraction du disque"), (p, ct) => { setup.InstallIso(iso, p, ct); return Tr("Jeu installé dans game\\. Ajoute maintenant le Title Update 1.04."); });
     }
 
     void InstallFolder()
     {
-        var dlg = new OpenFolderDialog { Title = "Choisis le dossier du disque extrait (celui qui contient default.xex)" };
+        var dlg = new OpenFolderDialog { Title = Tr("Choisis le dossier du disque extrait (celui qui contient default.xex)") };
         if (dlg.ShowDialog(this) != true) return;
         if (!ConfirmOverwrite()) return;
         string dir = dlg.FolderName;
-        RunJob("Copie du jeu", (p, ct) => { setup.InstallFolder(dir, p, ct); return "Jeu copié dans game\\."; });
+        RunJob(Tr("Copie du jeu"), (p, ct) => { setup.InstallFolder(dir, p, ct); return Tr("Jeu copié dans game\\."); });
     }
 
     bool ConfirmOverwrite() =>
-        !setup.HasGame || MessageBox.Show(this, "Le dossier game\\ contient déjà un jeu. Les fichiers identiques seront remplacés. Continuer ?",
+        !setup.HasGame || MessageBox.Show(this, Tr("Le dossier game\\ contient déjà un jeu. Les fichiers identiques seront remplacés. Continuer ?"),
             "WWE 2K17 PC", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
 
     void InstallTitleUpdate()
     {
-        var dlg = new OpenFileDialog { Title = "Choisis le Title Update 2 (tu00000001_00000000)", Filter = "Tous les fichiers|*.*" };
+        var dlg = new OpenFileDialog { Title = Tr("Choisis le Title Update 1.04 (tu00000001_00000000)"), Filter = Tr("Tous les fichiers") + "|*.*" };
         if (dlg.ShowDialog(this) != true) return;
         string pkg = dlg.FileName;
-        RunJob("Installation du Title Update", (p, ct) =>
+        RunJob(Tr("Installation du Title Update"), (p, ct) =>
         {
             string name = setup.InstallTitleUpdate(pkg, p);
-            return $"Title Update installé ({name}).";
+            return Tr("Title Update installé ({0}).", name);
         });
     }
 
     void AddDlcFiles()
     {
-        var dlg = new OpenFileDialog { Title = "Choisis les paquets DLC de WWE 2K17", Multiselect = true, Filter = "Tous les fichiers|*.*" };
+        var dlg = new OpenFileDialog { Title = Tr("Choisis les paquets DLC de WWE 2K17"), Multiselect = true, Filter = Tr("Tous les fichiers") + "|*.*" };
         if (dlg.ShowDialog(this) != true) return;
         InstallDlc(dlg.FileNames);
     }
 
     void AddDlcFolder()
     {
-        var dlg = new OpenFolderDialog { Title = "Choisis le dossier qui contient les DLC" };
+        var dlg = new OpenFolderDialog { Title = Tr("Choisis le dossier qui contient les DLC") };
         if (dlg.ShowDialog(this) != true) return;
         var found = new DirectoryInfo(dlg.FolderName).EnumerateFiles("*", SearchOption.AllDirectories)
             .Where(f => f.Length > 0x1000 && StfsPackage.HasPackageMagic(f.FullName)).Select(f => f.FullName).ToArray();
-        if (found.Length == 0) { StatusText.Text = "Aucun paquet DLC trouvé dans ce dossier."; return; }
+        if (found.Length == 0) { StatusText.Text = Tr("Aucun paquet DLC trouvé dans ce dossier."); return; }
         InstallDlc(found);
     }
 
     void InstallDlc(string[] files)
     {
-        RunJob($"Installation de {files.Length} DLC", (p, ct) =>
+        RunJob(Tr("Installation de {0} DLC", files.Length), (p, ct) =>
         {
             int ok = 0;
             var problems = new List<string>();
@@ -710,16 +735,16 @@ public partial class MainWindow : Window
                 var r = dlc.Install(f, p);
                 if (r.Ok) ok++; else problems.Add($"{r.File} : {r.Message}");
             }
-            return $"{ok} DLC installé(s)." + (problems.Count > 0 ? " Problème : " + problems[0] : "");
+            return Tr("{0} DLC installé(s).", ok) + (problems.Count > 0 ? Tr(" Problème : {0}", problems[0]) : "");
         });
     }
 
     void RemoveDlc(DlcStore.InstalledDlc d)
     {
-        if (MessageBox.Show(this, $"Retirer « {d.DisplayName} » ?", "WWE 2K17 PC", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        try { dlc.Remove(d.Name); StatusText.Text = "DLC retiré."; }
+        if (MessageBox.Show(this, Tr("Retirer « {0} » ?", d.DisplayName), "WWE 2K17 PC", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        try { dlc.Remove(d.Name); StatusText.Text = Tr("DLC retiré."); }
         catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
-        { StatusText.Text = "Impossible de retirer ce DLC : " + ex.Message; }
+        { StatusText.Text = Tr("Impossible de retirer ce DLC : {0}", ex.Message); }
         Rebuild();
     }
 
@@ -776,13 +801,13 @@ public partial class MainWindow : Window
         if (!string.IsNullOrEmpty(dry))
         {
             File.WriteAllLines(dry, new[] { psi.FileName }.Concat(psi.ArgumentList));
-            StatusText.Text = "Essai : ligne de commande écrite, le jeu n'est pas lancé.";
+            StatusText.Text = Tr("Essai : ligne de commande écrite, le jeu n'est pas lancé.");
             return;
         }
 
         try
         {
-            var p = Process.Start(psi) ?? throw new InvalidOperationException("démarrage impossible");
+            var p = Process.Start(psi) ?? throw new InvalidOperationException("start failed");
             proc = p;
             p.EnableRaisingEvents = true;
             var started = DateTime.Now;
@@ -791,18 +816,19 @@ public partial class MainWindow : Window
                 int code = p.ExitCode;
                 var span = DateTime.Now - started;
                 proc = null;
+                string time = span.ToString(@"mm\:ss");
                 StatusText.Text = code == 0
-                    ? $"Jeu fermé normalement ({span:mm\\:ss})."
-                    : $"Le jeu s'est arrêté (code {code}) après {span:mm\\:ss}. Va dans DIAGNOSTIC pour copier un rapport ou ouvrir le journal.";
+                    ? Tr("Jeu fermé normalement ({0}).", time)
+                    : Tr("Le jeu s'est arrêté (code {0}) après {1}. Va dans DIAGNOSTIC pour copier un rapport ou ouvrir le journal.", code, time);
                 Rebuild();
             });
-            StatusText.Text = $"Jeu lancé (PID {p.Id}). Bon match !";
+            StatusText.Text = Tr("Jeu lancé (PID {0}). Bon match !", p.Id);
             Rebuild();
         }
         catch (Exception ex)
         {
             proc = null;
-            StatusText.Text = "Impossible de lancer le jeu : " + ex.Message;
+            StatusText.Text = Tr("Impossible de lancer le jeu : {0}", ex.Message);
             Rebuild();
         }
     }
