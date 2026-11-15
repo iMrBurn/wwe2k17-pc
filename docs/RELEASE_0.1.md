@@ -11,7 +11,15 @@ These are the ones that would make a release pointless if they are broken. All n
       4,709,925 bytes, different content) and closed cleanly (`EXIT confirmed` ... `Execution complete`). After
       relaunching, the user confirmed the change was still there. Only one setting and one exe so far: a save
       with real content (a created wrestler, a Universe in progress) and the other three exes are not covered.
-- [ ] **Creation suite.** What WWE players use most, and it exercises a lot of code at once.
+- [~] **Creation suite.** What WWE players use most, and it exercises a lot of code at once. First pass
+      2026-11-15 on `wwe2k17_native.exe`: the user created an attire for AJ Styles, saw it in the editor, in a
+      match and on the entrance, with **no texture bug** (he had them in WWE '12 and 2K15). The game wrote
+      `00CustomSuperStar.cas` (3.3 MB) and `SaveData.Dat` (4,710,719 bytes) during the session; CAWs work.
+      **Open: on the superstar select screen the character's render is a black silhouette** ("SUPERSTAR /
+      OVERALL 79" over a dark figure). No warning or rejected texture in the log. Not yet known whether it hits
+      every wrestler or only the edited one, nor whether `wwe2k17.exe` (Xenos) shows it. Next: F9 on that
+      screen (draw log of the frame), and the same screen on the Xenos build. Still to check: that the created
+      attire is there after a relaunch.
 - [ ] **MyCAREER** and the rest of **Universe** (the Story Collection is done and working): do they start, do
       they survive a few minutes.
 - [ ] **A real match from the menus on each of the four exes.** One has been played on `wwe2k17_native.exe`;
