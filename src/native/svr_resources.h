@@ -33,6 +33,9 @@ GuestTexture *SvrResolveTarget(u32 texture_va, float scale = 0.0f);
 void SvrAfterResolve(u32 texture_va, GuestTexture *dst, u32 level, u32 face);
 // Guest texture bound for sampling -> host texture (a resolve target, else a mirror).
 GuestTexture *SvrResolveTexture(u32 texture_va);
+// The same for a texture bound at sampler slot `sampler`: a movie's planes come back one frame late
+// (svr_movie_plane_delay), everything else as SvrResolveTexture.
+GuestTexture *SvrResolveTextureAt(u32 sampler, u32 texture_va);
 // Startup: makes the shaders (by shader cache hash) and vertex declarations (by element hash, from
 // the kept declarations) that the remembered pipelines wait for, so they build in the background.
 void SvrPrecreateReplayObjects(const std::vector<u64> &vertex_shaders,

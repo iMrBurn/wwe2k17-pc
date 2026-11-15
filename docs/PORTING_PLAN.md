@@ -682,3 +682,38 @@ builds present differently (the native renderer through its own plume swapchain 
 If either makes the native movie smooth, the cause is how 60 fps is shown on a 165 Hz display, and the work moves
 to the presenter. If neither does, the difference is somewhere none of this has looked.
 
+#### The luma plane arrives a frame after the chroma: a fix, waiting for the user's eye (2026-11-15)
+
+The user pointed out two things: he has no such problem on the other games (same renderer, same 165 Hz screen), and
+his very first report said the movies were "not smooth **or** with small graphic bugs". Every measurement so far
+looked at *which set* the game binds; none looked at whether the planes of one movie frame reach the screen
+together. They do not.
+
+**Measured** (the intro movie, frames 858-2100, the two sets of three planes: one big luma plane and two chroma
+planes each, rebuild frames from `[texcad]`; the luma compared with its own two chroma planes):
+
+| | luma and chroma on the same render frame | chroma ONE frame EARLIER than luma | chroma later |
+|---|---|---|---|
+| before, run 1 | 79% | 17% | 0% |
+| before, run 2 | 74% | 22% | 0% |
+| **with `svr_movie_plane_delay`** | **93%** | **2%** | 0% |
+
+So in about one flip in five, the picture drawn is the chroma of movie frame *n* over the luma of frame *n-1*: a frame
+of colour that does not match the brightness, which is what "mini graphic bugs" at the edges of moving things look
+like, and the user's first report on 2026-11-13 also said "ghosting". The luma is the big 1280x720 plane (900 KB) and
+it is the one that lags: waiting inside the frame for it to settle (an experiment earlier today) left this
+percentage at 78%, so it genuinely arrives about a frame after the game flips to the set. The Xbox GPU executes
+the draws after the game recorded them and reads the set whole, which is why `wwe2k17.exe` shows no such frame while
+making the same bind choices.
+
+**The fix** (`svr_resources.cpp`, `SvrResolveTextureAt`, cvar `svr_movie_plane_delay`, on by default): a plane that
+keeps changing (k_8, at least 256x256, rebuilt twice in a row within 8 frames) is shown one render frame late - the
+sampler slot gets the plane that was bound in it on the previous frame, read now. All planes of the set shift
+together, so they match; the movie is one frame (16.7 ms) behind its sound. Anything that is not such a plane is
+resolved as before. `SetTexture` in `hooks/state.cpp` now calls the slot-aware entry point.
+
+**Not yet confirmed by eye.** Metrics told the wrong story three times today, so this is not "fixed" until the user
+has watched the arena preview and a transition on `wwe2k17_native.exe`. The previous "settle" attempt measured
+as an improvement and was judged worse by eye; this one needs the same test. `--svr_movie_plane_delay=false` is
+the comparison.
+

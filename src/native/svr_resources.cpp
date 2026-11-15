@@ -49,6 +49,12 @@ REXCVAR_DEFINE_BOOL(svr_texture_full_hash, false, "SvR",
                     "Hash every texture in full on each frame it is used, instead of a sampled hash for "
                     "those of 16 KB and more (diagnostic: catches plane updates the sampling misses)");
 
+REXCVAR_DEFINE_BOOL(svr_movie_plane_delay, true, "SvR",
+                    "Show a movie's planes one render frame late, read at that time: the decoder finishes the "
+                    "luma plane up to a frame after the game binds the set, so read at the bind the chroma is "
+                    "one movie frame ahead of the luma for a frame (about 1 flip in 5). The Xbox GPU reads later "
+                    "and never sees it. false = read at the bind.");
+
 REXCVAR_DEFINE_BOOL(svr_log_texture_cadence, false, "SvR",
                     "Diagnostic: log every texture rebuild with the frame it happened in, to read "
                     "the cadence of a movie's plane textures off the log.");
@@ -1338,8 +1344,12 @@ struct MirrorCheck {
   u64 frame = 0;
   u64 sample = 0;      // SampleHash of the content the full hash was taken on
   u64 full_frame = 0;  // frame of the last full hash
+  u64 last_change = 0;      // frame of the last content change of a plane-like texture
+  u32 recent_changes = 0;   // changes in a row less than kLivePlaneFrames apart
+  bool plane_like = false;  // k_8 and at least 256x256: what a movie's planes look like
   GuestTexture *host = nullptr;
 };
+constexpr u64 kLivePlaneFrames = 8;
 std::unordered_map<u32, MirrorCheck> g_mirror_checks;  // D3D texture VA -> last check
 std::atomic<u64> g_frame{1};
 std::atomic<u64> g_mirror_builds{0}, g_mirror_build_ns{0};  // texture mirrors (re)built, CPU time
@@ -1559,6 +1569,17 @@ GuestTexture *SvrResolveTexture(u32 texture_va) {
     check.full_frame = frame;
     return check.host ? check.host : TargetWithSameMemory(texture_va);
   }
+  {
+    rex::graphics::xenos::xe_gpu_texture_fetch_t f{};
+    check.plane_like = ReadFetch(texture_va, f) && f.format == rex::graphics::xenos::TextureFormat::k_8 &&
+                       u32(f.size_2d.width) + 1 >= 256 && u32(f.size_2d.height) + 1 >= 256;
+    if (check.plane_like) {
+      check.recent_changes = (check.last_change != 0 && frame - check.last_change <= kLivePlaneFrames)
+                                 ? check.recent_changes + 1
+                                 : 1;
+      check.last_change = frame;
+    }
+  }
   const auto build_start = std::chrono::steady_clock::now();
   check.host = GetOrCreateNativeMirror(texture_va, 0);
   const auto build_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -1591,6 +1612,54 @@ GuestTexture *SvrResolveTexture(u32 texture_va) {
   check.sample = sample;
   check.full_frame = frame;
   return check.host ? check.host : TargetWithSameMemory(texture_va);
+}
+
+// The planes of a movie are drawn from two sets used in turn, bound by the game for the frame it chose. Mirrored at
+// the bind, the chroma planes are one movie frame ahead of the luma plane about 1 time in 5 (the decoder finishes
+// the big luma plane up to a frame after the game flips to the set; waiting for it inside the frame changes
+// nothing, so it really arrives later), which shows as a frame of mismatched picture. The Xbox GPU executes the
+// draws after the game recorded them and reads the set whole. So a plane that keeps changing (k_8, 256x256 or
+// more, changed twice in a row within a few frames) is shown one frame late: the slot gets the plane that was
+// bound in it on the previous frame, read now. Everything else is resolved as before.
+GuestTexture *SvrResolveTextureAt(u32 sampler, u32 texture_va) {
+  constexpr u32 kSlots = 16;
+  if (!REXCVAR_GET(svr_movie_plane_delay) || !texture_va || sampler >= kSlots)
+    return SvrResolveTexture(texture_va);
+  const u64 frame = g_frame.load(std::memory_order_relaxed);
+  bool live = false;
+  {
+    std::lock_guard lock(g_mutex);
+    const auto it = g_mirror_checks.find(texture_va);
+    live = it != g_mirror_checks.end() && it->second.plane_like && it->second.recent_changes >= 2 &&
+           it->second.last_change != 0 && frame - it->second.last_change <= kLivePlaneFrames;
+  }
+  u32 use = texture_va;
+  if (live) {
+    struct Bind {
+      u32 cur_va = 0, prev_va = 0;
+      u64 cur_frame = 0, prev_frame = 0;
+    };
+    static std::mutex s_mutex;
+    static Bind s_binds[kSlots];
+    std::lock_guard lock(s_mutex);
+    Bind &b = s_binds[sampler];
+    if (b.cur_frame != frame) {
+      b.prev_va = b.cur_va;
+      b.prev_frame = b.cur_frame;
+      b.cur_va = texture_va;
+      b.cur_frame = frame;
+    } else {
+      b.cur_va = texture_va;  // rebound within the frame: the previous frame's plane stays the reference
+    }
+    if (b.prev_va && frame - b.prev_frame <= 2) {
+      static std::atomic<u32> s_logged{0};
+      if (b.prev_va != texture_va && s_logged.fetch_add(1, std::memory_order_relaxed) < 8)
+        BD_INFO("SvR movie plane: slot {} shows 0x{:08X} (last frame's) instead of 0x{:08X}", sampler,
+                b.prev_va, texture_va);
+      use = b.prev_va;
+    }
+  }
+  return SvrResolveTexture(use);
 }
 
 }  // namespace bd::gpu

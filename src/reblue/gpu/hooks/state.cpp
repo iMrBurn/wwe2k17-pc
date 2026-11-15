@@ -247,7 +247,7 @@ void D3DDevice_SetVertexDeclaration_hook(u32 /*device*/, u32 decl_guest) {
 
 void D3DDevice_SetTexture_hook(u32 /*device*/, u32 sampler, u32 texture_guest) {
 #if defined(SVR_NATIVE_RENDERER)
-  auto *tex = bd::gpu::SvrResolveTexture(texture_guest);
+  auto *tex = bd::gpu::SvrResolveTextureAt(sampler, texture_guest);
 #else
   auto *tex = bd::gpu::ResolveGuestTexture(texture_guest);
 #endif
