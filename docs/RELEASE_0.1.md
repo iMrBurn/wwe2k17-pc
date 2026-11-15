@@ -38,7 +38,7 @@ screens need, which is exactly what the shipped seed should contain. So the test
 
 ## Known and accepted for 0.1
 
-- Movies look slightly less smooth with the native renderers than with `wwe2k17.exe` (reported on the arena preview, 165 Hz display). Measured: the game's own frame choices are equally uneven in both builds, so it is not the movie and not the texture path; five causes ruled out (see `PORTING_PLAN.md`, last section). Next tests are for the user's eye: `--bd_vsync=false`, and Windows at 60 Hz. Visible but harmless.
+- Movies in the native renderers: luma and chroma planes did not reach the screen together (one frame in five); fixed by showing a movie's planes one frame late (`svr_movie_plane_delay`), user-verified "cleaner" on the arena preview on 2026-11-15. Not yet looked at by eye: the transitions and the intro. The game's own frame picks stay slightly uneven in every build.
 - AMD GPUs are untested here and will stay that way until someone with one tries it. Say so plainly.
 - Loading times cannot be measured until WWE 2K15 PC's `rexglue-sdk-iostats.patch` is applied to `patches\sdk`
   (`GetFileIoStats` is stubbed, so every `[load]` line reads 0.0 MB).

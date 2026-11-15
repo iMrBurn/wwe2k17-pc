@@ -717,3 +717,8 @@ has watched the arena preview and a transition on `wwe2k17_native.exe`. The prev
 as an improvement and was judged worse by eye; this one needs the same test. `--svr_movie_plane_delay=false` is
 the comparison.
 
+**Verdict by eye, 2026-11-15:** the user watched the WWE Superstars arena preview on `wwe2k17_native.exe` with
+`svr_movie_plane_delay` on and said it was **cleaner** ("plus propre"). The metric and the eye agree this time, unlike
+the "settle" attempt earlier the same day. Not claimed: that the movie is now perfectly smooth (the game's own 1-then-3
+flip choices are still there, in Xenos as well), nor that transitions and the intro were looked at.
+
