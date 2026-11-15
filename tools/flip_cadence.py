@@ -62,6 +62,23 @@ def main(path: str) -> int:
     print(f"{len(held)} movie frames, {even} held the expected 2 render frames "
           f"= {100 * even / len(held):.0f}% even, {len(held) - even} held 1 or 3")
     print(f"held-for counts: {Counter(held).most_common(6)}")
+
+    # One line per movie: a run of flips with no gap of 30+ render frames (half a second) inside it. The
+    # intro plays several movies one after another, so a single overall figure hides which one is uneven.
+    segments, current = [], [changes[0]]
+    for frame in changes[1:]:
+        if frame - current[-1] > 30:
+            segments.append(current)
+            current = []
+        current.append(frame)
+    segments.append(current)
+    for number, seg in enumerate(segments, 1):
+        gaps = [b - a for a, b in zip(seg, seg[1:])]
+        if len(gaps) < 20:
+            continue
+        good = sum(1 for g in gaps if g == 2)
+        print(f"  movie {number}: frames {seg[0]}-{seg[-1]}, {len(gaps)} flips, "
+              f"{100 * good / len(gaps):.0f}% even")
     return 0
 
 
