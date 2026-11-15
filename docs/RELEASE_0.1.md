@@ -6,9 +6,11 @@ Short list, most important first. `VERSION` stays `0.0.1-dev` until the first tw
 
 These are the ones that would make a release pointless if they are broken. All need someone at the keyboard.
 
-- [ ] **Saves round-trip.** The game has written a `SaveData.Dat` (4.5 MB, `userdata\B13EBABEBABEBABE\545408BA\00000001\`),
-      so writing works. Nobody has checked that it is *read back*. Change a setting or create something, quit
-      from the EXIT menu, relaunch, and confirm it is still there.
+- [x] **Saves round-trip.** Done 2026-11-15 on `wwe2k17_native.exe`: the user changed something, quit from the
+      EXIT menu, and the game rewrote `SaveData.Dat` (`userdata\B13EBABEBABEBABE\545408BA\00000001\`, 4,709,917 ->
+      4,709,925 bytes, different content) and closed cleanly (`EXIT confirmed` ... `Execution complete`). After
+      relaunching, the user confirmed the change was still there. Only one setting and one exe so far: a save
+      with real content (a created wrestler, a Universe in progress) and the other three exes are not covered.
 - [ ] **Creation suite.** What WWE players use most, and it exercises a lot of code at once.
 - [ ] **MyCAREER** and the rest of **Universe** (the Story Collection is done and working): do they start, do
       they survive a few minutes.
