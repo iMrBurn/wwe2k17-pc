@@ -17,7 +17,7 @@ Unofficial native Windows x64 port of **WWE 2K17 (Xbox 360)**, made by staticall
 
 ## Known issues
 
-- **Movies are not quite smooth with the native renderers.** In a full-screen movie (an arena preview, a transition) about a third of the movie's frames are held a render frame too long or too short, which reads as slightly jerky motion. The game itself stays at 60 fps throughout, and `wwe2k17.exe` (the Xbox GPU emulation) plays the same movie smoothly, so `--gpu_backend` aside you can fall back to it for a cutscene. Measured and written up in [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md); not fixed.
+- **Movies look slightly less smooth with the native renderers than with `wwe2k17.exe`.** Reported on a full-screen movie (an arena preview, a transition) on a 165 Hz display: the motion in native reads as a little jerky while the Xbox GPU emulation plays the same movie smoothly, so you can fall back to it for a cutscene. The game itself stays at 60 fps, and the frames the game picks are equally uneven in both (measured), so the cause is probably how 60 fps reaches the screen, not the movie. Not fixed; written up in [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md).
 - **First entrance after a fresh install stutters.** The graphics driver compiles the entrance shaders the first time they are drawn, which can freeze the picture for over a second. They are remembered in `userdata\cache\pipelines.bin` and built at startup from then on, so it happens once.
 - Loading times are not measured yet: the SDK's file I/O statistics are stubbed, so every `[load]` line in the log reads 0.0 MB.
 - Not tested: saves beyond the game writing one, the creation suite, MyCAREER, and AMD GPUs.

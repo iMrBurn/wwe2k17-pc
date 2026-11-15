@@ -44,7 +44,13 @@ def main(path: str) -> int:
         gaps = [b - a for a, b in zip(frames, frames[1:]) if b - a < 12]
         if gaps and 2 <= statistics.median(gaps) <= 6:
             planes.add(va)
-    print(f"{len(planes)} plane-like textures, sizes {sorted({size[v] for v in planes})}")
+    if not rebuilt:
+        # wwe2k17.exe (Xenos) has no rebuilds to look at: it logs from the game's own SetTexture, and only
+        # k_8 textures of 256x256 and more (src/movie_bind_log.cpp), so everything logged counts as a plane.
+        planes = {va for vas in bound.values() for va in vas}
+        print(f"{len(planes)} textures logged by the game's SetTexture (Xenos log)")
+    else:
+        print(f"{len(planes)} plane-like textures, sizes {sorted({size[v] for v in planes})}")
 
     previous, changes = None, []
     for frame in sorted(bound):
@@ -62,6 +68,18 @@ def main(path: str) -> int:
     print(f"{len(held)} movie frames, {even} held the expected 2 render frames "
           f"= {100 * even / len(held):.0f}% even, {len(held) - even} held 1 or 3")
     print(f"held-for counts: {Counter(held).most_common(6)}")
+
+    # The same big plane rebuilt on the very next frame: its content changed again right after it was bound, so
+    # the first mirror was taken while the decoder was still writing it (half old, half new for one frame).
+    again = total = 0
+    for va, frames in rebuilt.items():
+        if va in planes and size.get(va, 0) >= 400 * 1024:
+            gaps = [b - a for a, b in zip(frames, frames[1:])]
+            total += len(gaps)
+            again += sum(1 for g in gaps if g == 1)
+    if total:
+        print(f"big planes rebuilt on the very next frame (caught half written): {again} of {total} rebuilds "
+              f"= {100 * again / total:.0f}%")
 
     # One line per movie: a run of flips with no gap of 30+ render frames (half a second) inside it. The
     # intro plays several movies one after another, so a single overall figure hides which one is uneven.

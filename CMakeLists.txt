@@ -18,6 +18,7 @@ set(WWE2K17_SOURCES
     src/content_hooks.cpp
     src/render_hooks.cpp
     src/framerate_hooks.cpp
+    src/movie_bind_log.cpp
     src/text_hooks.cpp
     src/shadows.cpp
     src/test_input.cpp

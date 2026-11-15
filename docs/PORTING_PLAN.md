@@ -635,3 +635,50 @@ Neither needs a human verdict: with `--svr_log_texture_cadence=true` the share o
 2 render frames is the measurement, and the baseline to beat is **69% correct, 31% held 1 or 3**
 (`logs/run-20261114-105051.log`, 211 flips).
 
+#### Correction, and what the measurements really say (2026-11-15)
+
+**The lead written up two sections above is wrong and is withdrawn.** It said the native build replaces the game's
+own `D3DDevice_Swap` while the Xenos build runs it, and called that a native-only change to the guest's present
+path. `src/native/svr_hook.h` says the opposite: the native hooks are `SVR_HOOK_AFTER`, which *runs the game's own
+function* and then hands the same arguments to the renderer ("SvR's D3D library stays in charge of every D3D object
+and all device state: it runs unmodified on the null GPU"). The guest's Swap runs in all four builds. The
+`#if !defined(SVR_NATIVE_RENDERER)` in `render_hooks.cpp` only keeps the *pacing log* hook out of the native builds,
+which call it from the renderer's present instead; I read that guard as if it removed Swap. The comments in
+`render_hooks.cpp` and `wwe2k17_native_stubs.cpp` that said "re:Blue owns Swap" were misleading and are fixed.
+
+**The game's bind decisions are equally uneven in both builds.** `wwe2k17.exe` now logs the same `[texbind]` line from
+the game's own `D3DDevice_SetTexture` (`src/movie_bind_log.cpp`, cvar `wwe2k17_log_movie_binds`, off by default).
+On the intro movie that both builds play identically (617 flips):
+
+| build | flips held the expected 2 render frames |
+|---|---|
+| native, five runs | 76%, 76%, 80%, 81%, 86% |
+| Xenos | **83%** |
+
+So the 1-then-3 pairs are what the game itself does with this movie on this PC, in both builds, and the "31% against
+a smooth Xenos" in the sections above was not a native-only defect. It also explains why four different knobs did not
+move the number: none of them can, because the number is a property of guest logic that all builds share.
+(`tools/movie_bench.ps1` runs the intro on its own and reads the result; same-build noise is about 5 points.)
+
+**Ruled out this session, each by measurement:**
+
+| suspect | result |
+|---|---|
+| frame limiter precision (`sleep_until`, about 1 ms) | spinning the last 1.5 ms of each frame: 76% with, 76% without |
+| the 2K17-only ring-wait yield (`wwe2k17_render_wait_yield=false`) | 81%, inside the noise |
+| skipping the renderer's Swap observation (`svr_hooks_off`) | stops presenting altogether, cannot be a test |
+| a plane caught half written when mirrored | the same 1280x720 plane was rebuilt on the very next frame in 20% of its rebuilds, but in all 283 cases logged the pixels were **identical** (0.00% differ) and so was the descriptor: redundant rebuilds, not a visible defect. Waiting for the plane to settle before mirroring cut them to 9-13% and changed nothing on screen; reverted |
+
+**What is left.** The bind decisions and the pixels shown are the same in both builds, so what the user sees as
+smooth in Xenos and not in native has to be *when frames reach the display*, not what they contain. Two facts
+point there: the machine's display runs at **165 Hz** (`Win32_VideoController.CurrentRefreshRate`) while the game
+presents at 60, so each frame is held 3 or 2 refreshes (a 3-3-3-2 cycle) whichever builder presents it; and the two
+builds present differently (the native renderer through its own plume swapchain with `bd_vsync` on and a
+`sleep_until` limiter, the Xenos build through the SDK's presenter). Nothing here measures that yet.
+
+**Two cheap tests, both for the user's eye, neither needs code:**
+- native with `--bd_vsync=false` on the arena preview;
+- the same preview with Windows set to 60 Hz (or a multiple: 120, 180) instead of 165.
+If either makes the native movie smooth, the cause is how 60 fps is shown on a 165 Hz display, and the work moves
+to the presenter. If neither does, the difference is somewhere none of this has looked.
+

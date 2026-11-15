@@ -38,9 +38,7 @@ screens need, which is exactly what the shipped seed should contain. So the test
 
 ## Known and accepted for 0.1
 
-- Movies are not quite smooth with the native renderers (about a third of a movie's frames held a render frame
-  too long or short). Measured, five causes ruled out, best remaining lead written up in `PORTING_PLAN.md`:
-  the native build replaces the game's own `D3DDevice_Swap`, the Xenos build does not. Visible but harmless.
+- Movies look slightly less smooth with the native renderers than with `wwe2k17.exe` (reported on the arena preview, 165 Hz display). Measured: the game's own frame choices are equally uneven in both builds, so it is not the movie and not the texture path; five causes ruled out (see `PORTING_PLAN.md`, last section). Next tests are for the user's eye: `--bd_vsync=false`, and Windows at 60 Hz. Visible but harmless.
 - AMD GPUs are untested here and will stay that way until someone with one tries it. Say so plainly.
 - Loading times cannot be measured until WWE 2K15 PC's `rexglue-sdk-iostats.patch` is applied to `patches\sdk`
   (`GetFileIoStats` is stubbed, so every `[load]` line reads 0.0 MB).

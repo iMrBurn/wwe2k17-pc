@@ -111,11 +111,19 @@ extern "C" REX_FUNC(sub_82BB0C18) {
 }
 
 // Once per guest present: pacing log every 5 s. Called by the Swap hook below (wwe2k17.exe) or by the native renderer
-// for each presented frame (wwe2k17_native.exe, src/native/wwe2k17_native_stubs.cpp: re:Blue owns Swap there).
+// for each presented frame (wwe2k17_native.exe, src/native/wwe2k17_native_stubs.cpp). The game's own Swap runs in the
+// native builds too (src/native/svr_hook.h: SVR_HOOK_AFTER runs the game's function, then hands the same arguments to
+// the renderer); the #if below only keeps this pacing hook out of them, since the renderer calls it from its present.
 uint64_t Wwe2k17NowUs() { return NowUs(); }
 void Wwe2k17FramerateOnPresent(uint64_t now_us);  // framerate_hooks.cpp
 
+// Guest presents so far, the same count in every build (Swap hook in wwe2k17.exe, the renderer's present in the
+// native ones): lets a log line say which frame it belongs to (movie_bind_log.cpp).
+static std::atomic<uint64_t> g_present_count{0};
+uint64_t Wwe2k17PresentCount() { return g_present_count.load(std::memory_order_relaxed); }
+
 void Wwe2k17PacingOnPresent() {
+  g_present_count.fetch_add(1, std::memory_order_relaxed);
   const uint64_t now = NowUs();
   Wwe2k17FramerateOnPresent(now);
   PaceStats& p = g_pace;

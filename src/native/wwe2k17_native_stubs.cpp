@@ -26,8 +26,8 @@ std::shared_ptr<const Replacement> Find(uint64_t) { return nullptr; }
 
 void Wwe12DisplayInit(rex::ui::ImGuiDrawer*) {}
 
-// The "Guest pacing" log line of render_hooks.cpp (the Xenos build gets it from its D3DDevice_Swap hook; here re:Blue
-// owns Swap, so the renderer reports each presented frame instead).
+// The "Guest pacing" log line of render_hooks.cpp (the Xenos build gets it from its D3DDevice_Swap hook; in the native builds the game's own Swap
+// runs unmodified, so the renderer reports each presented frame instead).
 void Wwe2k17PacingOnPresent();
 void Wwe2k17OnGuestPresent(uint8_t*) { Wwe2k17PacingOnPresent(); }
 

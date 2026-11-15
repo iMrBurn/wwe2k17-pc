@@ -12,7 +12,9 @@ if (Get-Process wwe2k17, wwe2k17_native, wwe2k17_d3d12, wwe2k17_d3d11 -ErrorActi
     throw "a game is already running: close it first"
 }
 $env:WWE2K17_EXE = $Exe
-$line = & "$PSScriptRoot\run.ps1" "--svr_log_texture_cadence=true" @GameArgs
+# The native exes log from their renderer, the Xenos one (no renderer of ours) from the game's SetTexture.
+$logFlag = if ($Exe -eq "wwe2k17") { "--wwe2k17_log_movie_binds=true" } else { "--svr_log_texture_cadence=true" }
+$line = & "$PSScriptRoot\run.ps1" $logFlag @GameArgs
 if ($line -notmatch "pid (\d+) log (.+)$") { throw "could not read the launch line: $line" }
 $gamePid = [int]$Matches[1]
 $log = $Matches[2].Trim()
