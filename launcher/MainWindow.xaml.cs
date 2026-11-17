@@ -129,7 +129,7 @@ public partial class MainWindow : Window
         CompositionTarget.Rendering += OnFrame;
 
         var ver = Path.Combine(root, "VERSION");
-        VersionText.Text = "LAUNCHER 0.6" + (File.Exists(ver) ? "  ·  PORT " + File.ReadAllText(ver).Trim().ToUpperInvariant() : "");
+        VersionText.Text = "LAUNCHER 0.7" + (File.Exists(ver) ? "  ·  PORT " + File.ReadAllText(ver).Trim().ToUpperInvariant() : "");
 
         var tick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         tick.Tick += (_, _) => TailLog();
@@ -564,7 +564,7 @@ public partial class MainWindow : Window
     {
         var sb = new System.Text.StringBuilder();
         string ver = File.Exists(Path.Combine(root, "VERSION")) ? File.ReadAllText(Path.Combine(root, "VERSION")).Trim() : "?";
-        sb.AppendLine($"WWE 2K17 PC {ver} · launcher 0.6 · {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine($"WWE 2K17 PC {ver} · launcher 0.7 · {DateTime.Now:yyyy-MM-dd HH:mm}");
         sb.AppendLine($"Windows {Environment.OSVersion.Version} · {Environment.ProcessorCount} threads");
         foreach (var (label, value, _, _) in DiagLines()) sb.AppendLine($"{label}: {value}");
         foreach (var e in Engines) sb.AppendLine($"  {e.Exe}: {(File.Exists(EnginePath(e)) ? "present" : "missing")}{(e.Id == cfg.Engine ? " (selected)" : "")}");
