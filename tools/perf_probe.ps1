@@ -8,6 +8,33 @@ $p = Get-Process -Name $Name -ErrorAction SilentlyContinue | Select-Object -Firs
 if (-not $p) { throw "$Name is not running" }
 $cores = [Environment]::ProcessorCount
 
+# Thread names (SetThreadDescription: the SDK and the game name theirs).
+Add-Type -Namespace Probe -Name Native -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern System.IntPtr OpenThread(int access, bool inherit, int id);
+[DllImport("kernel32.dll")] public static extern bool CloseHandle(System.IntPtr h);
+[DllImport("kernel32.dll")] public static extern int GetThreadDescription(System.IntPtr h, out System.IntPtr desc);
+[DllImport("kernel32.dll")] public static extern System.IntPtr LocalFree(System.IntPtr p);
+[DllImport("ntdll.dll")] public static extern int NtQueryInformationThread(System.IntPtr h, int cls, out System.IntPtr info, int len, System.IntPtr ret);
+'@
+# Unnamed threads: the module their start routine is in, and its offset (same build = same offset).
+function ThreadName([int]$id) {
+    $h = [Probe.Native]::OpenThread(0x0040, $false, $id)  # THREAD_QUERY_INFORMATION
+    if ($h -eq [IntPtr]::Zero) { return "" }
+    $p = [IntPtr]::Zero; $name = ""
+    if ([Probe.Native]::GetThreadDescription($h, [ref]$p) -ge 0 -and $p -ne [IntPtr]::Zero) {
+        $name = [Runtime.InteropServices.Marshal]::PtrToStringUni($p); [void][Probe.Native]::LocalFree($p)
+    }
+    $start = [IntPtr]::Zero
+    if (-not $name -and [Probe.Native]::NtQueryInformationThread($h, 9, [ref]$start, 8, [IntPtr]::Zero) -eq 0) {
+        $a = $start.ToInt64()
+        foreach ($m in $script:modules) {
+            $b = $m.BaseAddress.ToInt64()
+            if ($a -ge $b -and $a -lt $b + $m.ModuleMemorySize) { $name = "{0}+0x{1:X}" -f $m.ModuleName, ($a - $b); break }
+        }
+    }
+    [void][Probe.Native]::CloseHandle($h); $name
+}
+
 function Snapshot($proc) {
     $proc.Refresh()
     $t = @{}
@@ -35,6 +62,7 @@ function GpuLoad($procId, $secs) {
         ForEach-Object { "{0} {1:N0}%" -f $_.Key, ($_.Value | Measure-Object -Average).Average }) -join ", "
 }
 
+$script:modules = $p.Modules
 for ($r = 0; $r -lt $Repeat; $r++) {
     $a = Snapshot $p
     $gpu = GpuLoad $p.Id $Seconds
@@ -48,5 +76,5 @@ for ($r = 0; $r -lt $Repeat; $r++) {
     $proc = 100.0 * ($b.Total - $a.Total) / $wall
     "{0:HH:mm:ss} process {1:N0}% of one core ({2} cores) | GPU {3}" -f $b.When, $proc, $cores, $gpu
     $rows | Sort-Object Pct -Descending | Select-Object -First 8 |
-        ForEach-Object { "  t{0,-6} {1,5:N1}%" -f $_.Thread, $_.Pct }
+        ForEach-Object { "  t{0,-6} {1,5:N1}%  {2}" -f $_.Thread, $_.Pct, (ThreadName $_.Thread) }
 }
