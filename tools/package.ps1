@@ -18,7 +18,7 @@ New-Item -ItemType Directory -Force $Dist | Out-Null
 
 # The four renderers, their runtime settings and the libraries they load.
 foreach ($f in "wwe2k17.exe", "wwe2k17_native.exe", "wwe2k17_d3d12.exe", "wwe2k17_d3d11.exe",
-                "wwe2k17.toml", "rexruntime.dll", "rexgpu-xenos.dll") {
+                "wwe2k17.toml", "rexruntime.dll", "rexgpu-xenos.dll", "dxcompiler.dll", "dxil.dll") {
     Copy-Item (Join-Path $Build $f) $Dist
 }
 # plume\ holds the Vulkan/D3D backend data the native exes load next to them.
