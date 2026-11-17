@@ -722,3 +722,65 @@ the comparison.
 the "settle" attempt earlier the same day. Not claimed: that the movie is now perfectly smooth (the game's own 1-then-3
 flip choices are still there, in Xenos as well), nor that transitions and the intro were looked at.
 
+
+## 2026-11-17: native renderer performance - measured, and the first two gains
+
+Goal: run on as many PCs as possible at the highest steady frame rate, as a PC game rather than an emulator.
+The game's logic is tied to 60 Hz, so "highest frame rate" means a steady 60 on the weakest hardware we can reach.
+
+**Instruments (new).** The `[perf]` log's CPU lines were Android only: on PC they now give the render thread's own
+CPU time, the whole process's, and the render thread split (draws, constants, textures, geometry, the game's own D3D
+code inside our hooks). `tools/perf_probe.ps1` samples CPU per thread (by name) and the GPU engine load from outside;
+`tools/perf_bench.ps1` runs the attract demo with no input, can pin the game to N logical CPUs to imitate a small
+CPU, and averages the demo match's `[perf]` lines. The demo match is the same scene from launch to launch (same
+constant block counts), so alternating runs on one build is a fair A/B.
+
+**Where the time goes** (wwe2k17_native.exe, Vulkan, attract demo match, i7 Raptor Lake 28 threads + RTX 5070, on
+the charger; on battery Windows hides the NVIDIA GPU and throttles the CPU, and measurements are noise):
+
+| | per frame / share |
+|---|---|
+| whole game | ~16-17 ms of CPU per 16.7 ms frame = about one core in total |
+| render thread (records the frame) | 5.0 ms: draws 2.4 (constants 1.7 of it), geometry 0.5, textures 0.2, game D3D 0.6-1.5, the rest is the game's own code |
+| other busy threads | two game threads (~13% and ~9% of a core), the null GPU's `GPU Commands` (~11%), the SDK's `rex::thread::TimerQueue` (**~15%**), Wwise |
+| GPU | RTX 5070: 3D engine ~10% at the automatic 2560x1440. Intel Raptor Lake iGPU (battery): 40% at its automatic 720p, 60 fps held |
+| waits | GPU wait 0, GPU-ring wait 0%: nothing waits on the GPU; shader compiles are already done at start-up |
+
+**Minimum hardware, as measured here:** an Intel iGPU of this generation holds 60 at 720p. Pinned to 4 logical CPUs
+the demo match holds 60 (hitches only during loads); pinned to 2, 55-56 fps. So the CPU, not the GPU, is what shuts
+out older PCs, and the D3D11 build (feature level 11_0) already covers old GPUs.
+
+**Gain 1 - the SDK timer thread** (`patches/sdk/0002-timer-queue-sleep.patch`, cvar `timer_queue_sleep`). On Windows
+the SDK's TimerQueue only runs the 1 ms `KeTimeStampBundle` tick, and its disruptorplus spin-wait (spin, then yield,
+sleep 1 ms one time in 20) kept that thread at ~15% of a core doing nothing. It now sleeps on a high-resolution
+waitable timer until the next tick.
+
+| | stock | sleeping |
+|---|---|---|
+| TimerQueue thread, 28 threads | 15.4% of a core | below 2% (not in the top 8) |
+| whole process, demo match | 98% of a core | 89% |
+| 2 threads, 4 alternating runs (frame interval in the match) | 18.2 ms | 18.4-18.65 ms |
+
+On 2 threads the 1,000 wake-ups a second cost slightly more than the stock spin, which yields to the game's threads,
+so the default `auto` sleeps only with 8 or more threads (where the freed time is power and heat a laptop can spend
+on its GPU boost). `tools/build-sdk.ps1` now applies a patch added after the first build.
+
+**Gain 2 - shader-constant blocks reused on PC** (`svr_reuse_constant_blocks`, now on by default, as on Android and
+WWE '12 PC 1.2): ~45% of the ~1,950 4 KiB blocks a frame are identical to the previous one of their stage and are
+reused instead of copied. Constants 1.7 -> 1.1 ms, render thread 5.0 -> 4.6 ms (same scene, same build, A/B).
+
+Both checked by eye by the user on the demo match: nothing visibly different.
+
+**Tried and dropped:** the null GPU worker's idle loop (500 yields before waiting on the write pointer event) cut to
+16: `GPU Commands` stayed at ~11%, so that thread's time is real packet processing, not idling. Reverted.
+
+**What is left, biggest first:**
+1. The 2-thread case (55-56 fps): it is contention, not one slow thread - render thread 5 ms, game threads, `GPU
+   Commands` 11% all share two cores. The one emulation cost left there is the guest command stream (the game's D3D
+   library writes PM4 packets the null GPU then parses); removing it means letting the hooked D3D calls skip the
+   packet writing, a large change worth a session of its own.
+2. Constants: 1.1 ms is still a full 4 KiB copy and byte swap per changed block; copying only the registers a shader
+   reads would cut it further but needs the converter to record that range (relative addressing reads the whole
+   window).
+3. Load-time log spam: ~5,000 `BaseHeap/PhysicalHeap::Alloc` error lines at the match load (guest allocator probes
+   that fail by design), worth silencing for loading hitches.
