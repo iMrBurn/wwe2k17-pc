@@ -36,10 +36,10 @@ function Avg($pattern) {
     if ($v) { "{0:N1}" -f ($v | Measure-Object -Average).Average } else { "-" }
 }
 $gpu = ($lines | Select-String "Vulkan GPU|D3D12 GPU|adapter" | Select-Object -First 1)
-$dev = (Get-Content $log | Select-String "Vulkan GPU: '([^']+)'|GPU caps: .* on ([^(]+)\(" | Select-Object -First 1)
+$dev = (Get-Content $log | Select-String "GPU caps: \S+ \S+ on (.+?) \(driver" | Select-Object -First 1)
 [pscustomobject]@{
     log = Split-Path $log -Leaf; args = ($GameArgs -join " ")
-    gpu = if ($dev) { ($dev.Matches[0].Groups[1].Value + $dev.Matches[0].Groups[2].Value).Trim() } else { "?" }
+    gpu = if ($dev) { $dev.Matches[0].Groups[1].Value.Trim() } else { "?" }
     work_ms = Avg 'work ([\d.]+) ms \(max'; interval_ms = Avg 'interval ([\d.]+) ms'
     hitches = ($lines | ForEach-Object { if ($_ -match 'hitches >25ms (\d+)') { [int]$Matches[1] } } | Measure-Object -Sum).Sum
     render_cpu_ms = Avg 'render thread ([\d.]+) ms \(work'; game_cpu_ms = Avg 'whole game ([\d.]+) ms'

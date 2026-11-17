@@ -799,3 +799,35 @@ goes away by not writing the guest command stream at all.
 On 2 threads the process uses ~130% of the 200% available, and the render thread's wall time per frame is twice its
 CPU time: frames are late because the threads wait on each other through scheduling, not because the CPU is full.
 No single cheap fix exists there; 4 threads already hold 60 in the match, so the 2-thread case is left as is.
+
+### Small graphics chips: where the GPU frame goes (2026-11-17)
+
+`svr_gpu_timing=true` (new, off by default, `src/reblue/gpu/gpu_timing.cpp`) writes a GPU timestamp each time a
+render target is bound and around the present, and every 10 s logs a `[gputime]` line: GPU time per frame and the
+targets that took it. D3D12's numbers are sound (2.7 ms per frame on the RTX 5070 at 2560x1440); Vulkan's came out
+about 60 times too small on the Intel chip, so this is read on `wwe2k17_d3d12.exe`. On D3D12 `svr_gpu_device=Intel`
+picks the integrated GPU of a laptop. Note for measuring: `run.ps1` passes arguments through `Start-Process`, so a
+GPU name with spaces must be quoted inside the argument, or the game silently keeps the default GPU.
+
+Intel Raptor Lake UHD Graphics (the laptop's integrated chip), attract demo match, 60 fps held in every case:
+
+| | 720p (automatic) | 540p (`svr_render_scale=540`) |
+|---|---|---|
+| GPU time per frame | **6.0 ms** (36% of 16.7) | 5.0 ms |
+| main scene (1280x736 / 960x552) | 2.4 ms | 1.8 ms |
+| second full-size pass (1280x720 / 960x540) | 0.75 ms | 0.42 ms |
+| 512x512 RGBA16F target | 0.57 ms | 0.60 ms |
+| present (scale to the window, gamma) | 0.45 ms | 0.45 ms |
+| 64x64 target | 0.38 ms | 0.39 ms |
+| other small targets (512x512, 256x256, 320x180...) | ~1.2 ms | ~1.2 ms |
+
+Windows' "GPU engine" load (`perf_probe.ps1`) said 41% and moved little whatever was changed: neither
+`bd_anisotropy=0` (42%) nor `wwe2k17_shadows=false` (41%) helped, and 540p only went to 35%. It is a load figure
+at whatever clock the chip chose, not GPU time, so it cannot rank settings; the timestamps can.
+
+**Conclusion.** The GPU is not what keeps a PC out. This integrated chip has close to 3x headroom at 720p; a chip
+half as fast (UHD 620 class) would still be near 12 ms, inside 16.7. Lowering the resolution saves little because
+about 60% of the frame does not scale with it (shadow and reflection targets, small post-processing passes, the
+present), so a dynamic-resolution system would buy little for its risk and is not worth building. The automatic
+720p on integrated chips and on discrete GPUs under 3.5 GB stays as it is; `svr_render_scale=540` remains the manual
+fallback for the weakest chips.

@@ -18,6 +18,7 @@
 #include <rex/cvar.h>
 
 #include "gpu/gpu_profiling.h"
+#include "gpu/gpu_timing.h"
 
 #include "core/logging.h"
 
@@ -257,6 +258,7 @@ bool Video::BindDrawFramebufferLocked(bool color_clear_follows) {
     return true;
   }
   BD_GPU_ZONE("BindDrawFramebuffer");
+  GpuTimingTarget(s, rt, ds);
 
   if (!rt && !ds) {
     u32 n;

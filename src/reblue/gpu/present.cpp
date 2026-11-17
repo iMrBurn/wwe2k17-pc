@@ -28,6 +28,7 @@
 #include <plume_render_interface.h>
 
 #include "gpu/gpu_profiling.h"
+#include "gpu/gpu_timing.h"
 
 #include "core/logging.h"
 #include "engine/engine.h"
@@ -569,7 +570,9 @@ void Video::Present(GuestTexture *frontBuffer) {
   }
 
   BeginCommandList(s);
+  GpuTimingMark(s, "present (scale, gamma, overlay)");
   RecordPresentPass(s, rt, back, back_fb);
+  GpuTimingMark(s, "(end)");
 
   const u32 cur = s.frame.load(std::memory_order_relaxed);
   s.command_lists[cur]->end();
