@@ -4,7 +4,7 @@ Unofficial native Windows x64 port of **WWE 2K17 (Xbox 360)**, made by staticall
 
 **This repository contains project code and documentation only. No game data is included or linked.** You need your own copy of the Xbox 360 game and its Title Update 1.04. Please do not ask for game files in the issues.
 
-> **Status: work in progress, no release yet.** The game boots to its menus and plays a full match at 60 fps with the native renderer in Vulkan (`wwe2k17_native.exe`), Direct3D 12 (`wwe2k17_d3d12.exe`) and Direct3D 11 (`wwe2k17_d3d11.exe`), and with the Xbox GPU emulation in Vulkan (`wwe2k17.exe`).
+> **Status: 0.1 beta.** The game boots to its menus and plays full matches at 60 fps with the native renderer in Vulkan (`wwe2k17_native.exe`), Direct3D 12 (`wwe2k17_d3d12.exe`) and Direct3D 11 (`wwe2k17_d3d11.exe`), and with the Xbox GPU emulation in Vulkan (`wwe2k17.exe`). `WWE2K17 Launcher.exe` installs the game from your disc image and picks the renderer.
 
 ## What works
 
@@ -14,13 +14,26 @@ Unofficial native Windows x64 port of **WWE 2K17 (Xbox 360)**, made by staticall
 - Movies and transition videos play at full rate.
 - The EXIT menu quits the game.
 - DLC packages install from `userdata\dlc_inbox\`.
+- Saves are written and read back; the creation suite (created attires and superstars), MyCAREER and Universe start and play.
+- Titantrons and the arena's stage movies show their own pictures during entrances.
+
+## What it needs
+
+Measured on the attract demo match (docs/PORTING_PLAN.md, 2026-11-17):
+
+- **CPU:** 4 threads hold 60 fps in a match (a 2-thread CPU gets 55-56 fps). The whole game uses about one core.
+- **GPU:** anything with Vulkan 1.2, Direct3D 12 or Direct3D 11 (feature level 11_0). An Intel integrated chip of
+  the Raptor Lake generation needs 6 ms of its 16.7 ms frame at the automatic 720p, so older integrated chips hold
+  60 too. Integrated GPUs and discrete GPUs under 3.5 GB render at 720p; larger GPUs at a multiple of 720p matching
+  your screen (`svr_render_scale` to choose, 540 for the weakest chips).
 
 ## Known issues
 
 - **Movies in the native renderers.** A movie's luma plane reaches the screen a frame after its chroma planes, which showed as small colour glitches at the edges of moving things; the native renderers now show a movie's planes one frame late so they match (`svr_movie_plane_delay`, on by default; checked by eye on an arena preview, "cleaner"). The frames the game itself picks for a 30 Hz movie at 60 fps stay slightly uneven in every build, `wwe2k17.exe` included. Written up in [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md).
 - **First entrance after a fresh install stutters.** The graphics driver compiles the entrance shaders the first time they are drawn, which can freeze the picture for over a second. They are remembered in `userdata\cache\pipelines.bin` and built at startup from then on, so it happens once.
 - Loading times are not measured yet: the SDK's file I/O statistics are stubbed, so every `[load]` line in the log reads 0.0 MB.
-- Not tested: saves beyond the game writing one, the creation suite, MyCAREER, and AMD GPUs.
+- **Created superstars on the superstar select screen** may show as a black silhouette instead of their render (seen once, created wrestlers only; being checked).
+- Not tested: AMD GPUs.
 
 ## Options
 

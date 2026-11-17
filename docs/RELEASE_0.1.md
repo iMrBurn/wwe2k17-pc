@@ -21,10 +21,10 @@ These are the ones that would make a release pointless if they are broken. All n
       screen (draw log of the frame), and the same screen on the Xenos build. The user says the silhouette is CAW-only
       (normal superstars render fine). That the created attire is still there after a relaunch was **not
       checked**: the user chose to accept it as fine on 2026-11-15, and the game did write `00CustomSuperStar.cas`.
-- [ ] **MyCAREER** and the rest of **Universe** (the Story Collection is done and working): do they start, do
+- [x] **MyCAREER** and the rest of **Universe** (played by the user 2026-11-17) (the Story Collection is done and working): do they start, do
       they survive a few minutes.
-- [ ] **A real match from the menus on each of the four exes.** One has been played on `wwe2k17_native.exe`;
-      the other three have only run the attract loop.
+- [x] **A real match from the menus on each of the four exes.** Played by the user on 2026-11-17 (after the
+      performance changes of that day, which touch all four exes).
 
 Doing all of the above also fills `userdata\cache\pipelines.bin` and `declarations.bin` with everything those
 screens need, which is exactly what the shipped seed should contain. So the testing *is* the preparation.
@@ -33,9 +33,10 @@ screens need, which is exactly what the shipped seed should contain. So the test
 
 - [ ] `tools\package.ps1 -Zip` once the caches above are full. It copies the four exes, the launcher, the two
       seed caches, and refuses to finish if any game file ends up in the folder.
-- [ ] **The launcher must pick the exe.** `WWE2K17 Launcher.exe` exists but the four renderers are chosen with
-      `$env:WWE2K17_EXE` today. This belongs to the launcher session, not to this one.
-- [ ] Bump `VERSION` to `0.1.0` and say in the README what this release is.
+- [x] **The launcher picks the exe.** Done in 46f7a8f (2026-11-13): "NATIF · VULKAN / DIRECT3D 12 / DIRECT3D 11"
+      and "ÉMULATION XENOS". Its Vulkan description still says full-screen movies are a little jerky, which the
+      plane-delay fix has since improved: to reword in the launcher's own work.
+- [x] Bump `VERSION` to `0.1.0` and say in the README what this release is.
 
 ## Known and accepted for 0.1
 
