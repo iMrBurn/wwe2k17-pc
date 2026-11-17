@@ -4,7 +4,9 @@ Unofficial native Windows x64 port of **WWE 2K17 (Xbox 360)**, made by staticall
 
 **This repository contains project code and documentation only. No game data is included or linked.** You need your own copy of the Xbox 360 game and its Title Update 1.04. Please do not ask for game files in the issues.
 
-> **Status: 0.1 beta.** The game boots to its menus and plays full matches at 60 fps with the native renderer in Vulkan (`wwe2k17_native.exe`), Direct3D 12 (`wwe2k17_d3d12.exe`) and Direct3D 11 (`wwe2k17_d3d11.exe`), and with the Xbox GPU emulation in Vulkan (`wwe2k17.exe`). `WWE2K17 Launcher.exe` installs the game from your disc image and picks the renderer.
+> **Status: 0.1 beta, and the only release planned for 2026.** It is a beta: expect bugs, and please report what you find in the issues (without game files). Known problems are listed below.
+>
+> **0.1 beta.** The game boots to its menus and plays full matches at 60 fps with the native renderer in Vulkan (`wwe2k17_native.exe`), Direct3D 12 (`wwe2k17_d3d12.exe`) and Direct3D 11 (`wwe2k17_d3d11.exe`), and with the Xbox GPU emulation in Vulkan (`wwe2k17.exe`). `WWE2K17 Launcher.exe` installs the game from your disc image and picks the renderer.
 
 ## What works
 
@@ -37,6 +39,7 @@ Measured on the attract demo match (docs/PORTING_PLAN.md, 2026-11-17):
   the superstar in the creation suite, change nothing and save (ACCEPT) once to get a correct one. Fixed in the
   native renderers (`svr_clear_new_depth`, on by default; checked by eye on an Intel Raptor Lake iGPU); written up
   in [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md).
+- **Some Titantron videos are corrupted** (coloured stripes and blocks on the stage screens, seen with Mojo Rawley and Roman Reigns; Brock Lesnar's is fine). It is the same in all four renderers, so it comes from the game's own video decoding, not from the renderer. Not fixed yet.
 - Not tested: AMD GPUs.
 
 ## Options
