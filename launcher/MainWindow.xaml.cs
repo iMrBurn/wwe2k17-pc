@@ -55,7 +55,7 @@ public partial class MainWindow : Window
         new("xenos", "ÉMULATION XENOS", "wwe2k17.exe", false, "Émulation de la puce de la Xbox 360 : le plus fidèle, joue les vidéos correctement, mais plus lent."),
     };
     // Internal heights of the native renderer (svr_render_scale); 0 = automatic from the screen and the GPU.
-    static readonly int[] InternalHeights = { 0, 540, 720, 1080, 1440, 2160 };
+    static readonly int[] InternalHeights = { 0, 480, 540, 720, 1080, 1440, 2160 };
     static readonly string[] AaNames = { "NON", "OUI", "FORT" };
     static string OnOff(bool b) => b ? "OUI" : "NON";
     List<string> gpuNames = new();
@@ -298,6 +298,8 @@ public partial class MainWindow : Window
         Add("AFFICHAGE", "Fenêtré ou plein écran, résolution de la fenêtre, V-Sync, carte graphique.", () => ShowScreen("display"));
         Add("GRAPHISMES", "Moteur graphique, finesse du rendu, anticrénelage, filtrage, ombres.", () => ShowScreen("graphics"));
         Add("JEU", "Langue, 60 images/s, vibration, son, options avancées.", () => ShowScreen("gameopts"));
+        if (File.Exists(BackupPath))
+            Add("ANNULER LE PRÉRÉGLAGE", "Remet les réglages d'avant le préréglage Steam Deck / petit PC.", RestorePreset);
         Back();
     }
 
@@ -612,16 +614,19 @@ public partial class MainWindow : Window
             var names = await Task.Run(() =>
             {
                 var psi = new ProcessStartInfo("powershell.exe",
-                    "-NoProfile -NonInteractive -Command \"(Get-CimInstance Win32_VideoController).Name\"")
+                    "-NoProfile -NonInteractive -Command \"(Get-CimInstance Win32_VideoController).Name; 'CORES=' + ((Get-CimInstance Win32_Processor | Measure-Object NumberOfCores -Sum).Sum)\"")
                 { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
                 using var p = Process.Start(psi)!;
                 string text = p.StandardOutput.ReadToEnd();
                 p.WaitForExit(8000);
                 return text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToList();
             });
-            gpuNames = names;
+            var cores = names.FirstOrDefault(n => n.StartsWith("CORES="));
+            if (cores != null) int.TryParse(cores.AsSpan(6), out physicalCores);
+            gpuNames = names.Where(n => !n.StartsWith("CORES=")).ToList();
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException) { }
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, OfferProfile);
     }
 
     void AddCheck(string name, bool ok)

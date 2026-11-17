@@ -200,6 +200,22 @@ public static class Loc
         new[] { "Le jeu s'est arrêté (code {0}) après {1}. Va dans DIAGNOSTIC pour copier un rapport ou ouvrir le journal.", "The game stopped (code {0}) after {1}. Go to DIAGNOSTICS to copy a report or open the log.", "Das Spiel wurde beendet (Code {0}) nach {1}. Gehe zu DIAGNOSE, um einen Bericht zu kopieren oder das Log zu öffnen.", "El juego se detuvo (código {0}) tras {1}. Ve a DIAGNÓSTICO para copiar un informe o abrir el registro.", "Il gioco si è fermato (codice {0}) dopo {1}. Vai in DIAGNOSTICA per copiare un rapporto o aprire il log." },
         new[] { "Jeu lancé (PID {0}). Bon match !", "Game started (PID {0}). Have a great match!", "Spiel gestartet (PID {0}). Viel Spaß beim Match!", "Juego iniciado (PID {0}). ¡Buen combate!", "Gioco avviato (PID {0}). Buon match!" },
 
+        // Steam Deck / small PC profile
+        new[] { "Cela ressemble à un Steam Deck.", "This looks like a Steam Deck.", "Das sieht nach einem Steam Deck aus.", "Esto parece una Steam Deck.", "Sembra uno Steam Deck." },
+        new[] { "Cela ressemble à un petit PC (carte graphique intégrée ou peu de mémoire).", "This looks like a small PC (integrated graphics or little memory).", "Das sieht nach einem kleinen PC aus (integrierte Grafik oder wenig Speicher).", "Esto parece un PC modesto (gráfica integrada o poca memoria).", "Sembra un PC modesto (grafica integrata o poca memoria)." },
+        new[] { "Réglages proposés :", "Proposed settings:", "Vorgeschlagene Einstellungen:", "Ajustes propuestos:", "Impostazioni proposte:" },
+        new[] { "Rendu natif Vulkan", "Native Vulkan rendering", "Natives Vulkan-Rendering", "Renderizado nativo Vulkan", "Rendering nativo Vulkan" },
+        new[] { "Plein écran", "Fullscreen", "Vollbild", "Pantalla completa", "Schermo intero" },
+        new[] { "Rendu interne {0}p", "Internal rendering {0}p", "Internes Rendering {0}p", "Render interno {0}p", "Rendering interno {0}p" },
+        new[] { "Tu pourras annuler dans PARAMÈTRES > ANNULER LE PRÉRÉGLAGE.", "You can undo this in SETTINGS > UNDO THE PRESET.", "Du kannst das unter EINSTELLUNGEN > VOREINSTELLUNG RÜCKGÄNGIG MACHEN zurücknehmen.", "Podrás deshacerlo en AJUSTES > DESHACER EL PRERREGULADO.", "Potrai annullare in IMPOSTAZIONI > ANNULLA IL PRESET." },
+        new[] { "Non merci, ne plus demander", "No thanks, don't ask again", "Nein danke, nicht mehr fragen", "No, gracias, no volver a preguntar", "No grazie, non chiedere più" },
+        new[] { "Pas maintenant", "Not now", "Nicht jetzt", "Ahora no", "Non ora" },
+        new[] { "Appliquer le profil", "Apply the profile", "Profil anwenden", "Aplicar el perfil", "Applica il profilo" },
+        new[] { "Préréglage appliqué. Tu peux l'annuler dans PARAMÈTRES.", "Preset applied. You can undo it in SETTINGS.", "Voreinstellung angewendet. Du kannst sie unter EINSTELLUNGEN rückgängig machen.", "Prerregulado aplicado. Puedes deshacerlo en AJUSTES.", "Preset applicato. Puoi annullarlo in IMPOSTAZIONI." },
+        new[] { "ANNULER LE PRÉRÉGLAGE", "UNDO THE PRESET", "VOREINSTELLUNG RÜCKGÄNGIG MACHEN", "DESHACER EL PRERREGULADO", "ANNULLA IL PRESET" },
+        new[] { "Remet les réglages d'avant le préréglage Steam Deck / petit PC.", "Restores the settings from before the Steam Deck / small PC preset.", "Stellt die Einstellungen vor der Steam-Deck-/Kleinrechner-Voreinstellung wieder her.", "Restaura los ajustes de antes del prerregulado Steam Deck / PC modesto.", "Ripristina le impostazioni precedenti al preset Steam Deck / PC modesto." },
+        new[] { "Réglages d'avant restaurés.", "Previous settings restored.", "Frühere Einstellungen wiederhergestellt.", "Ajustes anteriores restaurados.", "Impostazioni precedenti ripristinate." },
+
         // GameSetup messages
         new[] { "Ce fichier n'est pas une image de disque Xbox 360.", "This file is not an Xbox 360 disc image.", "Diese Datei ist kein Xbox-360-Disc-Image.", "Este archivo no es una imagen de disco de Xbox 360.", "Questo file non è un'immagine disco Xbox 360." },
         new[] { "Cette image ne contient pas default.xex : ce n'est pas le disque du jeu.", "This image does not contain default.xex: it is not the game disc.", "Dieses Image enthält keine default.xex: Es ist nicht die Spiel-Disc.", "Esta imagen no contiene default.xex: no es el disco del juego.", "Questa immagine non contiene default.xex: non è il disco del gioco." },
