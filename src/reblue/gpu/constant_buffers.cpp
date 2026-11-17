@@ -304,15 +304,11 @@ void PinScreenUVScaleReg(u8 *block) {
 // 4 KiB into write-combined GPU memory: 44 % of the render thread on the Android emulator in a
 // match. Reused only within the frame it was written for (its chunk is rewound after that), and
 // only for the same raw guest bytes and the same edits (key), so the GPU reads the same values.
-// PC: off by default until measured there; svr_reuse_constant_blocks=true turns it on for an A/B run
-// (the [perf] line counts blocks uploaded and reused).
-#if defined(__ANDROID__)
+// PC too since 2026-11-17 (as WWE '12 PC 1.2): in the attract demo match about 45% of the ~1,950
+// blocks a frame are reused and the constants cost drops from 1.6 to 0.9-1.2 ms of the render thread
+// (docs/PORTING_PLAN.md). false = copy for every draw, for an A/B run (the [perf] line counts both).
 REXCVAR_DEFINE_BOOL(svr_reuse_constant_blocks, true, "SvR",
                     "Reuse the previous constant block when the game's bytes are unchanged");
-#else
-REXCVAR_DEFINE_BOOL(svr_reuse_constant_blocks, false, "SvR",
-                    "Reuse the previous constant block when the game's bytes are unchanged");
-#endif
 struct StageBlockCache {
   u8 raw[kConstantBlockBytes];
   ConstantAllocation alloc;
