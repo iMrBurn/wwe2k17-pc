@@ -14,7 +14,7 @@ Unofficial native Windows x64 port of **WWE 2K17 (Xbox 360)**, made by staticall
 - Movies and transition videos play at full rate.
 - The EXIT menu quits the game.
 - DLC packages install from `userdata\dlc_inbox\`.
-- Saves are written and read back; the creation suite (created attires and superstars), MyCAREER and Universe start and play.
+- Saves are written and read back; the creation suite (created attires and superstars) and Universe start and play. (MyCAREER does not exist in the Xbox 360 version of the game.)
 - Titantrons and the arena's stage movies show their own pictures during entrances.
 
 ## What it needs
@@ -32,6 +32,9 @@ Measured on the attract demo match (docs/PORTING_PLAN.md, 2026-11-17):
 - **Movies in the native renderers.** A movie's luma plane reaches the screen a frame after its chroma planes, which showed as small colour glitches at the edges of moving things; the native renderers now show a movie's planes one frame late so they match (`svr_movie_plane_delay`, on by default; checked by eye on an arena preview, "cleaner"). The frames the game itself picks for a 30 Hz movie at 60 fps stay slightly uneven in every build, `wwe2k17.exe` included. Written up in [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md).
 - **First entrance after a fresh install stutters.** The graphics driver compiles the entrance shaders the first time they are drawn, which can freeze the picture for over a second. They are remembered in `userdata\cache\pipelines.bin` and built at startup from then on, so it happens once.
 - Loading times are not measured yet: the SDK's file I/O statistics are stubbed, so every `[load]` line in the log reads 0.0 MB.
+- **Created superstars show as a black silhouette on the superstar select screen** (normal superstars render fine).
+  The Xbox GPU emulation build (`wwe2k17.exe`) shows the same, so it does not come from the native renderers; the
+  cause is not found yet.
 - Not tested: AMD GPUs.
 
 ## Options

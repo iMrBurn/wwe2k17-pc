@@ -15,15 +15,16 @@ These are the ones that would make a release pointless if they are broken. All n
       2026-11-15 on `wwe2k17_native.exe`: the user created an attire for AJ Styles, saw it in the editor, in a
       match and on the entrance, with **no texture bug** (he had them in WWE '12 and 2K15). The game wrote
       `00CustomSuperStar.cas` (3.3 MB) and `SaveData.Dat` (4,710,719 bytes) during the session; CAWs work.
-      **Closed 2026-11-17: not a bug.** The Xenos emulation build (`wwe2k17.exe`) shows the same silhouette on
-      the same screen, so it is the game's own placeholder for a created superstar (the select screen's renders are
-      pre-made images, and a CAW has none). Original note: **on the superstar select screen the character's render is a black silhouette** ("SUPERSTAR /
+      **2026-11-17: the Xenos emulation build (`wwe2k17.exe`) shows the same silhouette on the same screen**, so
+      it does not come from the native renderers: the cause is common to every build (game code as recompiled, or
+      the SDK's kernel). The user expects the character to be visible there, so it stays a known issue for 0.1.
+      Original note: **on the superstar select screen the character's render is a black silhouette** ("SUPERSTAR /
       OVERALL 79" over a dark figure). No warning or rejected texture in the log. Not yet known whether it hits
       every wrestler or only the edited one, nor whether `wwe2k17.exe` (Xenos) shows it. Next: F9 on that
       screen (draw log of the frame), and the same screen on the Xenos build. The user says the silhouette is CAW-only
       (normal superstars render fine). That the created attire is still there after a relaunch was **not
       checked**: the user chose to accept it as fine on 2026-11-15, and the game did write `00CustomSuperStar.cas`.
-- [x] **MyCAREER** and the rest of **Universe** (played by the user 2026-11-17) (the Story Collection is done and working): do they start, do
+- [x] **Universe** (played by the user 2026-11-17). MyCAREER does not exist in the Xbox 360 version. (the Story Collection is done and working): do they start, do
       they survive a few minutes.
 - [x] **A real match from the menus on each of the four exes.** Played by the user on 2026-11-17 (after the
       performance changes of that day, which touch all four exes).
