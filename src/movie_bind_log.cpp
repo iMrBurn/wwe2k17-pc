@@ -7,7 +7,9 @@
 // with tools/flip_cadence.py, which says how long each movie frame was held (2 render frames is right for a 30 Hz
 // movie at 60 fps; 1 or 3 is the judder).
 //
-// Only k_8 textures of 256x256 and more are logged: the planes of a movie, and little else.
+// Only k_8 textures of 128x128 and more are logged: the planes of a movie, and little else. Each line also names the
+// sampler and the guest code that bound it (the return address), so two players feeding the same screen can be told
+// apart.
 // Off by default (wwe2k17_log_movie_binds). Compiled into every exe but only active in the Xenos one: in the native
 // builds the same function is already wrapped by the renderer's hook (src/reblue/gpu/hooks/state.cpp).
 
@@ -40,7 +42,7 @@ inline uint32_t LoadGuestU32(const uint8_t* base, uint32_t addr) {
 }
 
 std::mutex g_mutex;
-std::unordered_map<uint32_t, uint64_t> g_last_frame;  // texture -> frame it was last logged in
+std::unordered_map<uint64_t, uint64_t> g_last_frame;  // (texture, sampler, caller) -> frame it was last logged in
 uint32_t g_logged = 0;
 
 }  // namespace
@@ -53,13 +55,16 @@ extern "C" REX_FUNC(sub_82BA8E58) {
     const uint32_t d1 = LoadGuestU32(base, tex + 0x1C + 4);
     const uint32_t d2 = LoadGuestU32(base, tex + 0x1C + 8);
     const uint32_t width = (d2 & 0x1FFF) + 1, height = ((d2 >> 13) & 0x1FFF) + 1;
-    if ((d1 & 0x3F) == 2 && width >= 256 && height >= 256) {
+    if ((d1 & 0x3F) == 2 && width >= 128 && height >= 128) {
       const uint64_t frame = Wwe2k17PresentCount();
+      const uint32_t sampler = ctx.r4.u32, caller = static_cast<uint32_t>(ctx.lr);
+      const uint64_t key = (uint64_t(tex) << 32) ^ (uint64_t(sampler) << 24) ^ caller;
       std::lock_guard lock(g_mutex);
-      auto [it, fresh] = g_last_frame.try_emplace(tex, frame);
+      auto [it, fresh] = g_last_frame.try_emplace(key, frame);
       if (fresh || it->second != frame) {
         it->second = frame;
-        REXLOG_INFO("[texbind] f{} va 0x{:08X} {}x{}", frame, tex, width, height);
+        REXLOG_INFO("[texbind] f{} va 0x{:08X} {}x{} base 0x{:08X} s{} lr 0x{:08X}", frame, tex, width, height,
+                    d1 & 0xFFFFF000u, sampler, caller);
         ++g_logged;
       }
     }
