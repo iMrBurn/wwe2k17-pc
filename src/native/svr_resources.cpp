@@ -1635,28 +1635,36 @@ GuestTexture *SvrResolveTextureAt(u32 sampler, u32 texture_va) {
   }
   u32 use = texture_va;
   if (live) {
+    // Several movies can be drawn through the same sampler in one frame (an entrance draws the titantron and the
+    // arena's own stage movie, both with their planes in slots 0-2), so "what this slot held last frame" is kept per
+    // movie, not per slot: the history is keyed by slot and plane size, and the n-th bind of that key in a frame is
+    // paired with the n-th bind of it in the previous frame. Keyed by slot alone, the titantron was shown the stage
+    // movie's plane of the frame before and the two pictures alternated on the screen.
+    rex::graphics::xenos::xe_gpu_texture_fetch_t f{};
+    ReadFetch(texture_va, f);
+    const u64 key = (u64(sampler) << 32) | (u64(f.size_2d.width) << 16) | u64(f.size_2d.height);
     struct Bind {
-      u32 cur_va = 0, prev_va = 0;
+      std::vector<u32> cur, prev;
       u64 cur_frame = 0, prev_frame = 0;
     };
     static std::mutex s_mutex;
-    static Bind s_binds[kSlots];
+    static std::unordered_map<u64, Bind> s_binds;
     std::lock_guard lock(s_mutex);
-    Bind &b = s_binds[sampler];
+    Bind &b = s_binds[key];
     if (b.cur_frame != frame) {
-      b.prev_va = b.cur_va;
+      b.prev.swap(b.cur);
       b.prev_frame = b.cur_frame;
-      b.cur_va = texture_va;
+      b.cur.clear();
       b.cur_frame = frame;
-    } else {
-      b.cur_va = texture_va;  // rebound within the frame: the previous frame's plane stays the reference
     }
-    if (b.prev_va && frame - b.prev_frame <= 2) {
+    const size_t index = b.cur.size();
+    b.cur.push_back(texture_va);
+    if (index < b.prev.size() && b.prev[index] && frame - b.prev_frame <= 2) {
       static std::atomic<u32> s_logged{0};
-      if (b.prev_va != texture_va && s_logged.fetch_add(1, std::memory_order_relaxed) < 8)
-        BD_INFO("SvR movie plane: slot {} shows 0x{:08X} (last frame's) instead of 0x{:08X}", sampler,
-                b.prev_va, texture_va);
-      use = b.prev_va;
+      if (b.prev[index] != texture_va && s_logged.fetch_add(1, std::memory_order_relaxed) < 8)
+        BD_INFO("SvR movie plane: slot {} bind {} shows 0x{:08X} (last frame's) instead of 0x{:08X}", sampler,
+                index, b.prev[index], texture_va);
+      use = b.prev[index];
     }
   }
   return SvrResolveTexture(use);
