@@ -42,6 +42,10 @@ Measured on the attract demo match (docs/PORTING_PLAN.md, 2026-11-17):
 - **Some Titantron videos are corrupted** (coloured stripes and blocks on the stage screens, seen with Mojo Rawley and Roman Reigns; Brock Lesnar's is fine). It is the same in all four renderers, so it comes from the game's own video decoding, not from the renderer. Not fixed yet.
 - Not tested: AMD GPUs.
 
+## Linux and Steam Deck
+
+Not tested: there is no native Linux build, and nobody here has a Linux machine. The Windows build may run through Proton; the steps to try and what to send back are in [docs/LINUX_STEAM_DECK.md](docs/LINUX_STEAM_DECK.md).
+
 ## Options
 
 Pass them on the command line, for example `tools\run.ps1 --wwe2k17_60fps=false`.
