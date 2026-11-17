@@ -16,6 +16,9 @@
 #include <chrono>
 #include <mutex>
 #include <thread>
+#if defined(_WIN32)
+#include "core/windows_lean.h"
+#endif
 #if defined(__ANDROID__)
 #include <time.h>
 
@@ -387,6 +390,17 @@ double CpuMs(bool whole_process) {
   timespec ts{};
   if (clock_gettime(whole_process ? CLOCK_PROCESS_CPUTIME_ID : CLOCK_THREAD_CPUTIME_ID, &ts) == 0)
     return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+#elif defined(_WIN32)
+  FILETIME created, exited, kernel, user;
+  const BOOL ok = whole_process
+                      ? GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)
+                      : GetThreadTimes(GetCurrentThread(), &created, &exited, &kernel, &user);
+  if (ok) {
+    const auto ticks = [](const FILETIME &f) {
+      return (u64(f.dwHighDateTime) << 32) | f.dwLowDateTime;
+    };
+    return (ticks(kernel) + ticks(user)) / 1e4;  // 100 ns units
+  }
 #else
   (void)whole_process;
 #endif
@@ -458,7 +472,6 @@ void FrameStatsPresented(double gpu_wait_ms, double swap_ms) {
               "{:.1f} ms | constant blocks {:.0f} uploaded, {:.0f} reused",
               (cpu_now - fs.window_cpu_ms) / n, fs.sum_work / n,
               (process_now - fs.window_process_ms) / n, blocks_uploaded / n, blocks_reused / n);
-#if defined(__ANDROID__)
     {
       using namespace zones;
       const auto ms = [&](Id id) { return g_ns[id].exchange(0, std::memory_order_relaxed) / n / 1e6; };
@@ -471,7 +484,6 @@ void FrameStatsPresented(double gpu_wait_ms, double swap_ms) {
               "game D3D in hooks {:.1f} ms",
               draws, constants, textures, geometry, present, guest_d3d);
     }
-#endif
     fs = FrameStats{};
     fs.window_start = now;
     fs.last_present = now;
