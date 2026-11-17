@@ -35,6 +35,7 @@
 #include "gpu/texture_upload.h"
 #if defined(SVR_NATIVE_RENDERER)
 #include "svr_geometry.h"
+#include "svr_resources.h"
 #include "wwe12_texture_packs.h"
 #endif
 
@@ -561,6 +562,29 @@ void DumpBaseLevel(const MirrorLayout &L, const xe::xe_gpu_texture_fetch_t &fetc
     std::fwrite(staging.data() + size_t(by) * L.staging_row_bytes, 1, row, f);
   std::fclose(f);
 }
+
+// Dev aid: SVR_DUMP_PLANES=<dir> writes each k_8 texture of 256x256 to 1024x1024 (a Bink movie's
+// planes) as a .pgm there, every time its mirror is rebuilt, so the planes the game decoded can be
+// compared with the movie decoded outside the game.
+void DumpMoviePlane(const MirrorLayout &L, const std::vector<u8> &staging, u32 guest_va, u32 base) {
+  static const char *dir = std::getenv("SVR_DUMP_PLANES");
+  if (!dir || !*dir || L.format != xe::TextureFormat::k_8 || L.width < 256 || L.height < 256 ||
+      L.width > 1024 || L.height > 1024)
+    return;
+  static std::atomic<u32> s_count{0};
+  const u32 n = s_count.fetch_add(1);
+  // A rolling window: slot n % 6000 is overwritten, so the last 6000 planes are what remains and the
+  // file's first line says which build it was.
+  const std::string path = fmt::format("{}/slot{:04}.pgm", dir, n % 6000);
+  FILE *f = std::fopen(path.c_str(), "wb");
+  if (!f)
+    return;
+  std::fprintf(f, "P5\n# n=%u va=%08X base=%08X tiled=%u f=%llu\n%u %u\n255\n", n, guest_va, base,
+               u32(L.tiled), static_cast<unsigned long long>(SvrFrameIndex()), L.width, L.height);
+  for (u32 y = 0; y < L.height && y < L.block_h; ++y)
+    std::fwrite(staging.data() + size_t(y) * L.staging_row_bytes, 1, L.width, f);
+  std::fclose(f);
+}
 #endif
 
 #if defined(SVR_NATIVE_RENDERER)
@@ -603,6 +627,7 @@ GuestTexture *Build2DMirror(const MirrorLayout &L, const u8 *src,
   UntileFace(L, src, staging.data(), L.pack_off_x, L.pack_off_y);
 #if defined(SVR_NATIVE_RENDERER)
   DumpBaseLevel(L, fetch, staging, guest_va);
+  DumpMoviePlane(L, staging, guest_va, fetch.base_address << 12);
   // Texture dumps and packs (wwe12_texture_packs.h): the top level's content hash.
   if ((dxt || L.format == xe::TextureFormat::k_8_8_8_8) && wwe12::texture_packs::Active()) {
     using F = wwe12::texture_packs::Format;
