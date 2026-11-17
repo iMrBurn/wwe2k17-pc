@@ -41,13 +41,17 @@ if (-not (Test-Path "$Src\.git")) {
     Invoke-Checked git -c core.autocrlf=false clone --branch $Tag --depth 1 --recurse-submodules --shallow-submodules `
         https://github.com/rexglue/rexglue-sdk.git $Src
 }
-# Apply the patches once (a local commit marks them as applied).
-if (-not (git -C $Src log --oneline -1 | Select-String "WWE 2K17 PC: SDK patches" -Quiet)) {
-    foreach ($patch in (Get-ChildItem "$Root\patches\sdk\*.patch" | Sort-Object Name)) {
-        cmd /c "git -C `"$Src`" apply --check --whitespace=nowarn `"$($patch.FullName)`" >nul 2>nul"
-        if ($LASTEXITCODE -eq 0) { Invoke-Checked git -C $Src apply --whitespace=nowarn $patch.FullName }
-        else { Write-Host "already applied or not applicable: $($patch.Name)" }
-    }
+# Apply each patch not applied yet (a patch added later is applied to an existing checkout too), then a local
+# commit records them.
+$applied = $false
+foreach ($patch in (Get-ChildItem "$Root\patches\sdk\*.patch" | Sort-Object Name)) {
+    cmd /c "git -C `"$Src`" apply --check -R --whitespace=nowarn `"$($patch.FullName)`" >nul 2>nul"
+    if ($LASTEXITCODE -eq 0) { continue }  # already in the tree
+    cmd /c "git -C `"$Src`" apply --check --whitespace=nowarn `"$($patch.FullName)`" >nul 2>nul"
+    if ($LASTEXITCODE -eq 0) { Invoke-Checked git -C $Src apply --whitespace=nowarn $patch.FullName; $applied = $true }
+    else { Write-Warning "does not apply: $($patch.Name)" }
+}
+if ($applied) {
     Invoke-Checked git -C $Src add -A
     Invoke-Checked git -C $Src -c user.name="WWE 2K17 PC" -c user.email="wwe2k17@local" commit -q -m "WWE 2K17 PC: SDK patches"
 }
