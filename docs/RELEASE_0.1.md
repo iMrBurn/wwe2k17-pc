@@ -15,7 +15,9 @@ These are the ones that would make a release pointless if they are broken. All n
       2026-11-15 on `wwe2k17_native.exe`: the user created an attire for AJ Styles, saw it in the editor, in a
       match and on the entrance, with **no texture bug** (he had them in WWE '12 and 2K15). The game wrote
       `00CustomSuperStar.cas` (3.3 MB) and `SaveData.Dat` (4,710,719 bytes) during the session; CAWs work.
-      **Open: on the superstar select screen the character's render is a black silhouette** ("SUPERSTAR /
+      **Closed 2026-11-17: not a bug.** The Xenos emulation build (`wwe2k17.exe`) shows the same silhouette on
+      the same screen, so it is the game's own placeholder for a created superstar (the select screen's renders are
+      pre-made images, and a CAW has none). Original note: **on the superstar select screen the character's render is a black silhouette** ("SUPERSTAR /
       OVERALL 79" over a dark figure). No warning or rejected texture in the log. Not yet known whether it hits
       every wrestler or only the edited one, nor whether `wwe2k17.exe` (Xenos) shows it. Next: F9 on that
       screen (draw log of the frame), and the same screen on the Xenos build. The user says the silhouette is CAW-only
