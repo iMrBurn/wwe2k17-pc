@@ -784,3 +784,18 @@ Both checked by eye by the user on the demo match: nothing visibly different.
    window).
 3. Load-time log spam: ~5,000 `BaseHeap/PhysicalHeap::Alloc` error lines at the match load (guest allocator probes
    that fail by design), worth silencing for loading hitches.
+
+### The 2-thread case: what the null GPU thread really does (2026-11-17)
+
+`tools/thread_sampler.ps1` (new) suspends one thread about every millisecond, reads where it is and names the
+function from the SDK's PDBs. On `GPU Commands` in the demo match (3,000 samples): **84% asleep** inside
+`WAIT_REG_MEM` (the guest's command stream waits on a register or memory value, and the SDK sleeps 1 ms per poll),
+7% waiting for new commands, and only **~8% working**: single register writes (`ExecutePacketType0` ->
+`WriteRegister`, with its register-table lookup). So this thread is not spinning and not swamped with shader
+constants: two guesses built on that idea (fewer idle yields; storing constant ranges in one pass) were measured,
+moved nothing, and were reverted. What is left of it is ~1.5 ms of CPU per frame of real packet parsing, which only
+goes away by not writing the guest command stream at all.
+
+On 2 threads the process uses ~130% of the 200% available, and the render thread's wall time per frame is twice its
+CPU time: frames are late because the threads wait on each other through scheduling, not because the CPU is full.
+No single cheap fix exists there; 4 threads already hold 60 in the match, so the 2-thread case is left as is.
