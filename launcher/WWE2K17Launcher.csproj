@@ -7,7 +7,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>WWE2K17Launcher</AssemblyName>
     <RootNamespace>Launcher</RootNamespace>
-    <Version>0.1.0</Version>
+    <!-- the version of the whole project, from the VERSION file: the launcher compares it with the newest release -->
+    <Version Condition="Exists('..\VERSION')">$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\..\VERSION').Trim())</Version>
+    <Version Condition="!Exists('..\VERSION')">0.0.0</Version>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
   <!-- Icon built from the game's own art: kept out of Git (launcher_art/ is ignored), used when present. -->

@@ -46,6 +46,10 @@ Measured on the attract demo match (docs/PORTING_PLAN.md, 2026-11-17):
 
 Not tested: there is no native Linux build, and nobody here has a Linux machine. The Windows build may run through Proton; the steps to try and what to send back are in [docs/LINUX_STEAM_DECK.md](docs/LINUX_STEAM_DECK.md).
 
+## Updates
+
+From the first release that carries it, `WWE2K17 Launcher.exe` asks the project's GitHub release page for a newer version when it starts (nothing about you is sent; turn it off in Settings > Game > CHECK AT STARTUP). **UPDATE** in the main menu downloads the zip, checks it, replaces the launcher and the four exes, and restarts. Your game, saves and settings (`game\`, `userdata\`) are never touched, and if a file cannot be replaced everything is put back as it was. Earlier versions (0.1.0, 0.1.1) have no updater: unzip the new release over them once.
+
 ## Options
 
 Pass them on the command line, for example `tools\run.ps1 --wwe2k17_60fps=false`.

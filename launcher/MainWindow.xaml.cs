@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -33,6 +34,7 @@ public class LauncherSettings
     public bool Fps60 { get; set; } = true;    // wwe2k17_60fps
     public bool Shadows { get; set; } = true;  // wwe2k17_shadows
     public string Gpu { get; set; } = "";      // native renderer: Vulkan name of the GPU, "" = automatic
+    public bool CheckUpdates { get; set; } = true;   // ask GitHub for a newer release at startup
 }
 
 record Engine(string Id, string Name, string Exe, bool Native, string Info);
@@ -136,6 +138,7 @@ public partial class MainWindow : Window
         loading = false;
         ApplyLanguage();
         LoadGpuNames();
+        StartUpdateCheck();
         Loaded += (_, _) => { Focus(); ShowScreen("main"); };
     }
 
@@ -290,6 +293,7 @@ public partial class MainWindow : Window
         Add("FICHIERS DU JEU", "Installe le jeu depuis ton ISO, ajoute le Title Update 1.04, ouvre les dossiers.", () => ShowScreen("files"));
         Add("DLC", "Ajoute ou retire les contenus téléchargeables (DLC).", () => ShowScreen("dlc"));
         Add("DIAGNOSTIC", "Vérifie que tout est en place et copie un rapport à joindre en cas de problème.", () => ShowScreen("diag"));
+        Add("MISE À JOUR", UpdateInfo(), UpdateAction, UpdateValue, enabled: () => !busy && updateStatus != UpdateStatus.Checking);
         Add("QUITTER", "Ferme le launcher.", Close);
     }
 
@@ -378,6 +382,8 @@ public partial class MainWindow : Window
             () => OnOff(cfg.Fps60), _ => cfg.Fps60 = !cfg.Fps60);
         Add("VIBRATION", "Vibration de la manette.", () => { }, () => OnOff(cfg.Vibration), _ => cfg.Vibration = !cfg.Vibration);
         Add("COUPER LE SON", "Lance le jeu sans son.", () => { }, () => OnOff(cfg.Mute), _ => cfg.Mute = !cfg.Mute);
+        Add("VÉRIFIER AU DÉMARRAGE", "Au lancement du launcher, cherche une nouvelle version sur GitHub (rien d'autre n'est envoyé).", () => { },
+            () => OnOff(cfg.CheckUpdates), _ => cfg.CheckUpdates = !cfg.CheckUpdates);
         Add("OPTIONS AVANCÉES", "Arguments en plus pour le jeu (facultatif). Entrée pour écrire, Échap pour finir.", () => { }, text: true);
         Back();
     }
@@ -661,19 +667,24 @@ public partial class MainWindow : Window
             });
         }
         string result;
+        bool ok = false;
         try
         {
             var token = jobCancel.Token;
             result = await Task.Run(() => work(Progress, token)) ?? Tr("Terminé.");
+            ok = true;
         }
         catch (OperationCanceledException) { result = Tr("Annulé."); }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException or HttpRequestException)
         { result = Tr("Erreur : {0}", Tr(ex.Message)); }
         busy = false;
         jobCancel = null;
         ProgressTrack.Visibility = Visibility.Collapsed;
         RefreshChecks();
         StatusText.Text = result;
+        bool close = closeAfterJob && ok;       // an update is staged: the script waits for the launcher to close
+        closeAfterJob = false;
+        if (close) { await Task.Delay(1200); Close(); return; }
         Rebuild();
     }
 
