@@ -831,3 +831,54 @@ about 60% of the frame does not scale with it (shadow and reflection targets, sm
 present), so a dynamic-resolution system would buy little for its risk and is not worth building. The automatic
 720p on integrated chips and on discrete GPUs under 3.5 GB stays as it is; `svr_render_scale=540` remains the manual
 fallback for the weakest chips.
+
+
+## 2026-11-17: CAW black silhouette on the select screen - an Intel depth buffer, fixed
+
+**Symptom.** A created superstar showed as a black figure on the superstar select / VS screen ("SUPERSTAR /
+OVERALL 79"), on every build including `wwe2k17.exe` (Xenos), while the same CAW looked right in the creation
+suite, matches and entrances.
+
+**What the game does (TU 1.04).** The select-screen picture of a CAW is not drawn live: it is taken **once, when
+the CAW is saved**, and stored in the save. A singleton at [0x83852480] (ctor `sub_831C7A90`, state at +48) runs
+it: state 2 draws the CAW (`sub_831C8188` -> `sub_831C7BF8`) into a new 768x1280 surface, resolves it in four
+736x320 strips into a 736x1280 k_8_8_8_8 texture (11 mips); state 3 waits 2 frames; state 4 queues the worker
+`sub_831C81D8` -> `sub_831C7200`, which locks that texture, crops (15,130)-(705,1150) = 690x1020, resizes it
+twice and DXT5-compresses it (`sub_831C6FA8` -> `sub_831B11A0`); state 6 = done. In `00CustomSuperStar.cas`
+(zlib chunks; chunk 0 is the 1.8 MB index, then 8 slots of 5 MB) the picture is a 512x512 linear DXT5 image with
+mips. Decoded, the broken one had colour exactly 0 everywhere and a correct alpha shape. The Xenos build never
+redrew it: it only showed what the native build had saved on 2026-11-15, which is why it "showed the same".
+
+**Why it was black.** That save was made while the laptop ran on its **Intel Raptor Lake iGPU** (on battery,
+Windows hides the NVIDIA GPU; hence also the 1x render scale that day). Reproduced with
+`--svr_gpu_device="Intel(R) RaptorLake-S Mobile Graphics Controller"`; on the RTX 5070 at 1x and 2x the portrait
+came out right. The game draws the portrait twice: a colour pass (RB_COLOR_MASK 0xF, alpha blending, depth test
+GEQUAL with a reversed range), then `Clear(Z | STENCIL)`, then the same meshes again writing **alpha only**
+(mask 0x8) for a clean cut-out. It never clears depth before the first pass. The host depth surface is new and
+its first bind discards it (`discardTexture`); new colour surfaces are cleared (`svr_clear_new_surfaces`) but
+depth ones were skipped (`ClearColorTargetLocked` refuses depth formats). On NVIDIA that memory reads as 0 and
+every fragment passes; on Intel it held leftovers, **the colour pass drew nothing**, and only the alpha-only pass
+after the game's own depth clear landed: shape without colour. Measured on Intel with the new read-back logs:
+the drawing surface itself had 0 colour (so not the copy); with the alpha-only draws skipped (`SVR_SKIP_DRAWS=256`)
+it was empty (0% alpha). Same shaders, constants, textures and render state as the editor view, which is fine
+on Intel (it clears its depth each frame).
+
+**Fix.** `svr_clear_new_depth` (on by default, `src/reblue/gpu/draw_framebuffer.cpp`): the first time a new depth
+surface is bound, it is cleared to depth 0 / stencil 0, which is what NVIDIA happens to hand out, so NVIDIA
+behaves as before. **Checked by eye by the user on the Intel iGPU:** the CAW (re-saved there) shows in colour on
+the select screen. A CAW saved on Intel with 0.1.0 keeps its black picture until it is opened and saved again.
+
+**Leads tried and dropped on the way** (each disproved by a measurement): the delayed (2-frame) read-back at 1x
+(fine on NVIDIA at 1x); Intel render-target compression (`svr_rt_no_compression=true`: no change); the depth
+clear wiping colour (clear moved to a depth-only pass: no change); partial colour write masks (alpha-only pass
+done through blending: no change). A per-draw GPU copy of the portrait caused a device loss on Intel and was
+removed.
+
+**Dev aids kept.** `svr_log_readbacks` now logs, for the portrait (a mipmapped one-off 1024+ px tall), its mean
+colour and coverage at read-back time and the same for the 768x1280 surface it was drawn into; with
+`svr_dump_readbacks` both are dumped to `logs\readback_portrait*.rgba`. `SVR_PORTRAIT_TRACE=1` draw-logs the
+frame the portrait is drawn, with every float constant of the skin shaders (`60C885D930508D72`,
+`2D2D8AF656F1E7A8`, also on F9 frames). `SVR_SKIP_DRAWS` bit 256 skips alpha-only draws.
+
+**Not checked:** a match on NVIDIA after the change (new depth surfaces now start at 0 there too, as they did by
+luck), AMD GPUs, and created attires / Superstar Threads on the Intel iGPU.

@@ -28,6 +28,11 @@ REXCVAR_DEFINE_BOOL(svr_rt_level0_view, true, "SvR",
 REXCVAR_DEFINE_BOOL(svr_sampled_barrier, true, "SvR",
                     "Make copied textures readable before a draw samples them (false = 0.9 "
                     "behaviour, for tests: the right-strip blocks of #7/#11/#13).");
+REXCVAR_DEFINE_BOOL(svr_clear_new_depth, true, "SvR",
+                    "Clear a new depth/stencil surface to 0 the first time it is drawn into, as "
+                    "NVIDIA happens to hand it out. Intel left whatever its memory held: the "
+                    "created superstar's portrait failed its depth test and was saved as a black "
+                    "silhouette (false = old behaviour, for tests).");
 
 namespace bd::gpu {
 
@@ -292,6 +297,17 @@ bool Video::BindDrawFramebufferLocked(bool color_clear_follows) {
   if (!fb)
     return false;
   s.command_list->setFramebuffer(fb);
+  // A depth surface drawn into for the first time holds whatever its (recycled) memory held, and
+  // the game may draw before clearing it: the created superstar's portrait is drawn into a new
+  // 768x1280 surface with a reversed depth test (GEQUAL) and no clear first. On the Xbox and on
+  // NVIDIA that memory reads as 0, every fragment passes; on an Intel Raptor Lake iGPU it did not,
+  // the colour pass drew nothing and only the alpha-only pass after the game's own depth clear
+  // landed: a black silhouette in the save. Start it at 0, as NVIDIA does.
+  if (discard_ds && REXCVAR_GET(svr_clear_new_depth)) {
+    const bool stencil = ds->format == plume::RenderFormat::D32_FLOAT_S8_UINT ||
+                         ds->format == plume::RenderFormat::D24_UNORM_S8_UINT;
+    s.command_list->clearDepthStencil(true, stencil, 0.0f, 0);
+  }
   s.dirtyStates.viewport = true;
   s.dirtyStates.scissorRect = true;
   Video::FlushViewport();

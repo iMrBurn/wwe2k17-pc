@@ -64,9 +64,12 @@ static bool KeyFrameActive() {
   return s_target.load() == frame;
 }
 
+static std::atomic<u64> g_trace_frame{0};
+
 bool SvrDrawLogActive() {
   const u64 target = TargetFrame();
-  return (target && SvrFrameIndex() == target) || KeyFrameActive();
+  const u64 frame = SvrFrameIndex();
+  return (target && frame == target) || g_trace_frame.load() == frame || KeyFrameActive();
 }
 
 void SvrDrawLogDraw(u32 device_guest, const char *name, u32 primitive, bool indexed, u32 count,
@@ -120,6 +123,23 @@ void SvrDrawLogDraw(u32 device_guest, const char *name, u32 primitive, bool inde
           float(dev->psFloatConstants[13][2]), float(dev->psFloatConstants[13][3]),
           float(dev->psFloatConstants[14][0]), float(dev->psFloatConstants[14][1]),
           float(dev->psFloatConstants[14][2]), float(dev->psFloatConstants[14][3]));
+  // Every non-zero float constant of the skin shaders the created superstar's portrait uses
+  // (SVR_PORTRAIT_TRACE): compared between the portrait and the editor view.
+  const u64 ps_hash = ShaderHash(s.pixel_shader);
+  if (ps_hash == 0x60C885D930508D72ull || ps_hash == 0x2D2D8AF656F1E7A8ull) {
+    const auto dump = [](const char *stage, const be_f32 (*consts)[4]) {
+      std::string line;
+      for (u32 c = 0; c < 256; ++c) {
+        const float f[4] = {float(consts[c][0]), float(consts[c][1]), float(consts[c][2]),
+                            float(consts[c][3])};
+        if (f[0] != 0.0f || f[1] != 0.0f || f[2] != 0.0f || f[3] != 0.0f)
+          line += fmt::format(" c{}={:.6g},{:.6g},{:.6g},{:.6g}", c, f[0], f[1], f[2], f[3]);
+      }
+      BD_INFO("[drawlog]   {} consts{}", stage, line);
+    };
+    dump("ps", dev->psFloatConstants);
+    dump("vs", dev->vsFloatConstants);
+  }
   BD_INFO("[drawlog] #{} {} prim {} {} count {} start {} base {} | rt 0x{:08X}[{}] ds 0x{:08X}[{}] "
           "| vp {:.0f},{:.0f} {:.0f}x{:.0f} z {:.2f}-{:.2f} sc {},{}-{},{} | vs {:016X} ps {:016X} "
           "|{}",
@@ -170,6 +190,22 @@ void SvrDrawLogClear(u32 device_guest, u32 count, u32 rects_va, u32 flags, u32 c
   }
   BD_INFO("[drawlog] clear flags 0x{:X} color 0x{:08X} rt 0x{:08X} rects {}{}", flags, color,
           dev ? u32(dev->renderTargetShadow[0]) : 0u, count, rects);
+}
+
+namespace {
+bool TraceEnabled() {
+  static const bool on = std::getenv("SVR_PORTRAIT_TRACE") != nullptr;
+  return on;
+}
+}  // namespace
+
+void SvrPortraitTraceArm() {
+  if (!TraceEnabled())
+    return;
+  u64 expected = 0;
+  // Once per session: the first portrait is the one worth reading.
+  if (g_trace_frame.compare_exchange_strong(expected, SvrFrameIndex()))
+    BD_INFO("[portrait-trace] armed on frame {}", SvrFrameIndex());
 }
 
 }  // namespace bd::gpu

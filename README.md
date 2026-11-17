@@ -32,9 +32,11 @@ Measured on the attract demo match (docs/PORTING_PLAN.md, 2026-11-17):
 - **Movies in the native renderers.** A movie's luma plane reaches the screen a frame after its chroma planes, which showed as small colour glitches at the edges of moving things; the native renderers now show a movie's planes one frame late so they match (`svr_movie_plane_delay`, on by default; checked by eye on an arena preview, "cleaner"). The frames the game itself picks for a 30 Hz movie at 60 fps stay slightly uneven in every build, `wwe2k17.exe` included. Written up in [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md).
 - **First entrance after a fresh install stutters.** The graphics driver compiles the entrance shaders the first time they are drawn, which can freeze the picture for over a second. They are remembered in `userdata\cache\pipelines.bin` and built at startup from then on, so it happens once.
 - Loading times are not measured yet: the SDK's file I/O statistics are stubbed, so every `[load]` line in the log reads 0.0 MB.
-- **Created superstars show as a black silhouette on the superstar select screen** (normal superstars render fine).
-  The Xbox GPU emulation build (`wwe2k17.exe`) shows the same, so it does not come from the native renderers; the
-  cause is not found yet.
+- **Created superstars saved on an Intel integrated GPU with 0.1.0 or earlier keep a black silhouette** on the superstar
+  select screen. The game takes that picture once, when you save the superstar, and keeps it in the save: open
+  the superstar in the creation suite, change nothing and save (ACCEPT) once to get a correct one. Fixed in the
+  native renderers (`svr_clear_new_depth`, on by default; checked by eye on an Intel Raptor Lake iGPU); written up
+  in [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md).
 - Not tested: AMD GPUs.
 
 ## Options

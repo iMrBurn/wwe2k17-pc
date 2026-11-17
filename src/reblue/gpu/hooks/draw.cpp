@@ -163,7 +163,7 @@ void DispatchDraw(u32 device_guest, u32 primitive_type, const char *name,
   // Dev bisection switch: SVR_SKIP_DRAWS bitmask, 1 indexed, 2 DrawVertices, 4 BeginVertices (UP),
   // 8 any draw into a render target other than R8G8B8A8, 16 indexed with DHEN3N normals (lit
   // meshes), 32 indexed without, 64 unlit indexed skinned (real BLENDINDICES), 128 unlit indexed
-  // static.
+  // static, 256 draws writing alpha only (colour mask A).
   {
     static const u32 skip_mask = [] {
       const char *env = std::getenv("SVR_SKIP_DRAWS");
@@ -182,7 +182,9 @@ void DispatchDraw(u32 device_guest, u32 primitive_type, const char *name,
             skinned = true;
         }
       }
-      if (((skip_mask & 1) && args.indexed) || ((skip_mask & 2) && !args.indexed && !up) ||
+      if (((skip_mask & 256) &&
+           (bd::mem::load<u32>(device_guest + 0x28CCu + (0x2104u - 0x2100u) * 4u) & 0xFu) == 0x8u) ||
+          ((skip_mask & 1) && args.indexed) || ((skip_mask & 2) && !args.indexed && !up) ||
           ((skip_mask & 4) && up) ||
           ((skip_mask & 8) && s.pipelineState.renderTargetFormat !=
                                   plume::RenderFormat::R8G8B8A8_UNORM) ||

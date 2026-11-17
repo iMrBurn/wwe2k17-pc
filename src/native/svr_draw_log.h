@@ -14,4 +14,8 @@ void SvrDrawLogClear(u32 device_guest, u32 count, u32 rects_va, u32 flags, u32 c
 // BeginVertices data (big-endian floats as the game wrote them), first vertices only.
 void SvrDrawLogVertices(u32 data_va, u32 count, u32 stride);
 
+// SVR_PORTRAIT_TRACE=1 (dev): when the game makes the created superstar's 768x1280 portrait
+// surface, log that frame's draws (with every float constant of the skin shaders).
+void SvrPortraitTraceArm();
+
 }  // namespace bd::gpu

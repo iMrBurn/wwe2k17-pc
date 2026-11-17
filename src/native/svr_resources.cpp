@@ -1,6 +1,7 @@
 // SvR 2008 host resources for the game's own D3D textures and surfaces (see svr_resources.h).
 
 #include "svr_resources.h"
+#include "svr_draw_log.h"
 #include "gpu/cpu_zones.h"
 
 #include <algorithm>
@@ -123,6 +124,8 @@ GuestTexture *SvrCreateHostSurface(u32 width, u32 height, u32 format);
 namespace {
 
 std::mutex g_mutex;
+// The created superstar's 768x1280 portrait surface (svr_log_readbacks: read back beside it).
+std::atomic<GuestTexture *> g_portrait_surface{nullptr};
 
 // A host resource made for a guest surface or GPU-written texture, with the guest description it
 // was made from. Road to WrestleMania unloads characters between scenes and reuses those guest
@@ -334,6 +337,10 @@ GuestTexture *SvrResolveSurface(u32 surface_va) {
     Video::ClearTexture(host, 0u);
   BD_INFO("SvR surface 0x{:08X}: {}x{} format 0x{:08X} -> host {}", surface_va, width, height,
           format, host ? "ok" : "FAILED");
+  if (host && width == 768 && height == 1280 && !IsDepthFormat(host->format)) {
+    SvrPortraitTraceArm();  // dev aid, SVR_PORTRAIT_TRACE: the created superstar's portrait
+    g_portrait_surface.store(host, std::memory_order_relaxed);
+  }
   g_surfaces.emplace(surface_va, HostTarget{host, {bits, format}, extent,
                                             g_surface_frame.load(std::memory_order_relaxed)});
   return host;
@@ -680,6 +687,9 @@ void SvrAfterResolve(u32 texture_va, GuestTexture *dst, u32 level, u32 face) {
     const u64 frame = g_frame_index.load(std::memory_order_relaxed);
     if (dst->mipLevels > 1) {
       g_deferred_readbacks[texture_va] = DeferredReadback{dst, frame, {desc[0], desc[1]}};
+      if (REXCVAR_GET(svr_log_readbacks) && dst->height >= 1024)
+        BD_INFO("SvR target 0x{:08X}: {}x{} levels {} resolved at frame {}, read back in 2 frames",
+                texture_va, dst->width, dst->height, dst->mipLevels, frame);
       return;
     }
     struct Streak {
@@ -742,7 +752,77 @@ void ReadBackTarget(u32 texture_va, GuestTexture *dst) {
   u32 row_pitch = 0;
   if (!Video::ReadbackTextureLevel(dst, 0, 0, pixels, row_pitch))
     return;
-  if (REXCVAR_GET(svr_dump_readbacks) && (dst->width >= 1024 || dst->height >= 1024)) {
+  // A mipmapped picture 1024 px tall or more is a one-off the game saves (the created superstar's
+  // 736x1280 portrait): say what it holds, and dump it even when scene targets used the quota.
+  const bool portrait_like = dst->mipLevels > 1 && dst->height >= 1024;
+  if (REXCVAR_GET(svr_log_readbacks) && portrait_like && row_pitch) {
+    u64 sum[4] = {}, covered_rgb[3] = {}, covered = 0;
+    for (u32 y = 0; y < dst->height; ++y) {
+      const u8 *row = &pixels[size_t(y) * row_pitch];
+      for (u32 x = 0; x < dst->width; ++x) {
+        const u8 *px = row + x * 4u;
+        for (int k = 0; k < 4; ++k)
+          sum[k] += px[k];
+        if (px[3] > 16) {
+          ++covered;
+          for (int k = 0; k < 3; ++k)
+            covered_rgb[k] += px[k];
+        }
+      }
+    }
+    const u64 n = std::max<u64>(1, u64(dst->width) * dst->height), c = std::max<u64>(1, covered);
+    BD_INFO("SvR target 0x{:08X}: {}x{} read back at frame {}: mean bytes {} {} {} {}, {:.1f}% "
+            "with alpha > 16, their mean colour bytes {} {} {}",
+            texture_va, dst->width, dst->height, g_frame_index.load(std::memory_order_relaxed),
+            sum[0] / n, sum[1] / n, sum[2] / n, sum[3] / n, 100.0 * double(covered) / double(n),
+            covered_rgb[0] / c, covered_rgb[1] / c, covered_rgb[2] / c);
+    // The surface it was copied from: tells a portrait drawn without colour from one that lost
+    // its colour in the copy.
+    std::vector<u8> surf;
+    u32 surf_pitch = 0;
+    GuestTexture *surface = g_portrait_surface.load(std::memory_order_relaxed);
+    if (surface && Video::ReadbackTextureLevel(surface, 0, 0, surf, surf_pitch) && surf_pitch) {
+      u64 srgb[3] = {}, scov = 0;
+      for (u32 y = 0; y < surface->height; ++y)
+        for (u32 x = 0; x < surface->width; ++x) {
+          const u8 *px = &surf[size_t(y) * surf_pitch + x * 4u];
+          if (px[3] > 16) {
+            ++scov;
+            for (int k = 0; k < 3; ++k)
+              srgb[k] += px[k];
+          }
+        }
+      const u64 sn = std::max<u64>(1, u64(surface->width) * surface->height);
+      const u64 sc = std::max<u64>(1, scov);
+      BD_INFO("SvR portrait surface {}x{} format {}: {:.1f}% with alpha > 16, their mean colour "
+              "bytes {} {} {}", surface->width, surface->height, u32(surface->format),
+              100.0 * double(scov) / double(sn), srgb[0] / sc, srgb[1] / sc, srgb[2] / sc);
+      if (REXCVAR_GET(svr_dump_readbacks)) {
+        const auto path = rex::filesystem::GetExecutableFolder() / "logs" /
+                          fmt::format("readback_portrait_surface_{}x{}.rgba", surface->width,
+                                      surface->height);
+        if (FILE *f = _wfopen(path.c_str(), L"wb")) {
+          const u32 header[4] = {surface->width, surface->height, surf_pitch, 0};
+          std::fwrite(header, 4, 4, f);
+          std::fwrite(surf.data(), 1, surf.size(), f);
+          std::fclose(f);
+        }
+      }
+    }
+  }
+  static std::atomic<u32> s_portrait_dumps{0};
+  if (REXCVAR_GET(svr_dump_readbacks) && portrait_like &&
+      s_portrait_dumps.fetch_add(1, std::memory_order_relaxed) < 8) {
+    const auto path = rex::filesystem::GetExecutableFolder() / "logs" /
+                      fmt::format("readback_portrait_{:08X}_{}x{}_f{}.rgba", texture_va, dst->width,
+                                  dst->height, g_frame_index.load(std::memory_order_relaxed));
+    if (FILE *f = _wfopen(path.c_str(), L"wb")) {
+      const u32 header[4] = {dst->width, dst->height, row_pitch, texture_va};
+      std::fwrite(header, 4, 4, f);
+      std::fwrite(pixels.data(), 1, pixels.size(), f);
+      std::fclose(f);
+    }
+  } else if (REXCVAR_GET(svr_dump_readbacks) && (dst->width >= 1024 || dst->height >= 1024)) {
     static std::atomic<u32> s_dumps{0};
     static std::mutex s_dump_mutex;
     static std::unordered_map<u32, u32> s_dumps_per_target;
