@@ -48,7 +48,7 @@ if (Test-Path $DeclSeed) {
 }
 
 foreach ($f in "README.md", "LICENSE", "THIRD_PARTY.md") { Copy-Item (Join-Path $Root $f) $Dist }
-if (Test-Path (Join-Path $Root "third_partylicenses")) { New-Item -ItemType Directory -Force (Join-Path $Dist "third_party") | Out-Null; Copy-Item (Join-Path $Root "third_partylicenses") (Join-Path $Dist "third_party") -Recurse -Force }
+if (Test-Path (Join-Path $Root "third_party\licenses")) { New-Item -ItemType Directory -Force (Join-Path $Dist "third_party") | Out-Null; Copy-Item (Join-Path $Root "third_party\licenses") (Join-Path $Dist "third_party") -Recurse -Force }
 
 # A last check: nothing from the game must ever end up in the package.
 $banned = Get-ChildItem $Dist -Recurse -File |
