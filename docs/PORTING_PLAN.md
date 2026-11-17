@@ -880,5 +880,7 @@ colour and coverage at read-back time and the same for the 768x1280 surface it w
 frame the portrait is drawn, with every float constant of the skin shaders (`60C885D930508D72`,
 `2D2D8AF656F1E7A8`, also on F9 frames). `SVR_SKIP_DRAWS` bit 256 skips alpha-only draws.
 
-**Not checked:** a match on NVIDIA after the change (new depth surfaces now start at 0 there too, as they did by
-luck), AMD GPUs, and created attires / Superstar Threads on the Intel iGPU.
+**Checked after the change, by the user:** attires in the creation suite on the Intel iGPU, "it works" (a
+2-minute session, nothing saved; the log shows the attire composites written back and 60 fps); a match on the
+RTX 5070 (`wwe2k17_native.exe`, default settings), "nickel" (60 fps, no device error). Not checked: AMD GPUs, the
+D3D12 / D3D11 exes (same change, shared code), and a full match on the Intel iGPU.
