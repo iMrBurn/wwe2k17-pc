@@ -27,6 +27,14 @@ set(WWE2K17_SOURCES
     src/universe_stories.cpp
 )
 
+# The default runtime settings, built into the exes: the game writes them as wwe2k17.toml next to itself at the first
+# start when the file is missing, so the release zip does not ship that file and an update can never overwrite the
+# player's settings and key bindings (the F4 menu saves them there).
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/wwe2k17_runtime.toml" WWE2K17_DEFAULT_TOML)
+configure_file(src/default_config.h.in "${CMAKE_CURRENT_BINARY_DIR}/wwe2k17_generated/default_config.h" @ONLY)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/wwe2k17_runtime.toml")
+include_directories("${CMAKE_CURRENT_BINARY_DIR}/wwe2k17_generated")
+
 if(WIN32)
     add_executable(wwe2k17 WIN32 ${WWE2K17_SOURCES})
 else()

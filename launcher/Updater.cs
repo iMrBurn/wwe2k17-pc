@@ -112,6 +112,9 @@ public static class Updater
                     // never replace the player's data, whatever the zip says
                     string top = rel.Split('/')[0].ToLowerInvariant();
                     if (top is "game" or "userdata" or "logs" or "update_staging") continue;
+                    // the player's settings and the key bindings the F4 menu saves: releases from 0.1.3 on do not ship
+                    // this file (the game writes its defaults when it is missing), this guards against one that would
+                    if (rel.Equals("wwe2k17.toml", StringComparison.OrdinalIgnoreCase) && File.Exists(Path.Combine(root, "wwe2k17.toml"))) continue;
                     string dest = Path.GetFullPath(Path.Combine(payload, rel.Replace('/', Path.DirectorySeparatorChar)));
                     if (!dest.StartsWith(Path.GetFullPath(payload), StringComparison.OrdinalIgnoreCase))
                         throw new InvalidDataException("The zip contains an unsafe path.");

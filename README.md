@@ -6,7 +6,7 @@ Unofficial native Windows x64 port of **WWE 2K17 (Xbox 360)**, made by staticall
 
 > **Status: 0.1 beta, and the only release planned for 2026.** It is a beta: expect bugs, and please report what you find in the issues (without game files). Known problems are listed below.
 >
-> **0.1.2 beta.** The game boots to its menus and plays full matches at 60 fps with the native renderer in Vulkan (`wwe2k17_native.exe`), Direct3D 12 (`wwe2k17_d3d12.exe`) and Direct3D 11 (`wwe2k17_d3d11.exe`), and with the Xbox GPU emulation in Vulkan (`wwe2k17.exe`). `WWE2K17 Launcher.exe` installs the game from your disc image and picks the renderer (in English, French, German, Spanish or Italian, following the game language), and proposes lower settings on a Steam Deck or a small PC (untested on a real Deck), and updates itself from the GitHub releases.
+> **0.1.3 beta.** The game boots to its menus and plays full matches at 60 fps with the native renderer in Vulkan (`wwe2k17_native.exe`), Direct3D 12 (`wwe2k17_d3d12.exe`) and Direct3D 11 (`wwe2k17_d3d11.exe`), and with the Xbox GPU emulation in Vulkan (`wwe2k17.exe`). `WWE2K17 Launcher.exe` installs the game from your disc image and picks the renderer (in English, French, German, Spanish or Italian, following the game language), and proposes lower settings on a Steam Deck or a small PC (untested on a real Deck), and updates itself from the GitHub releases.
 
 ## What works
 
@@ -48,7 +48,7 @@ Not tested: there is no native Linux build, and nobody here has a Linux machine.
 
 ## Updates
 
-From the first release that carries it, `WWE2K17 Launcher.exe` asks the project's GitHub release page for a newer version when it starts (nothing about you is sent; turn it off in Settings > Game > CHECK AT STARTUP). **UPDATE** in the main menu downloads the zip, checks it, replaces the launcher and the four exes, and restarts. Your game, saves and settings (`game\`, `userdata\`) are never touched, and if a file cannot be replaced everything is put back as it was. Earlier versions (0.1.0, 0.1.1) have no updater: unzip the new release over them once.
+From the first release that carries it, `WWE2K17 Launcher.exe` asks the project's GitHub release page for a newer version when it starts (nothing about you is sent; turn it off in Settings > Game > CHECK AT STARTUP). **UPDATE** in the main menu downloads the zip, checks it, replaces the launcher and the four exes, and restarts. Your game, saves and settings (`game\`, `userdata\`, and `wwe2k17.toml`, where the F4 menu saves your key bindings) are never touched, and if a file cannot be replaced everything is put back as it was. Earlier versions (0.1.0, 0.1.1) have no updater: unzip the new release over them once.
 
 ## Options
 
@@ -104,6 +104,7 @@ DLC: copy your own WWE 2K17 DLC packages into `userdata\dlc_inbox\`; the game in
 5. Optional, to make a folder (and a zip) someone else can unpack:
 
    ```powershell
+   tools\build-launcher.ps1   # after every change of VERSION: the launcher's updater compares its own version
    tools\package.ps1 -Zip
    ```
 

@@ -16,9 +16,10 @@ $Dist = Join-Path $Root "$Out\WWE2K17-PC"
 if (Test-Path $Dist) { Remove-Item $Dist -Recurse -Force }
 New-Item -ItemType Directory -Force $Dist | Out-Null
 
-# The four renderers, their runtime settings and the libraries they load.
+# The four renderers and the libraries they load. No wwe2k17.toml: the game writes its defaults at the first start
+# (src/wwe2k17_app.h), so unzipping or updating over an install never replaces the player's settings and key bindings.
 foreach ($f in "wwe2k17.exe", "wwe2k17_native.exe", "wwe2k17_d3d12.exe", "wwe2k17_d3d11.exe",
-                "wwe2k17.toml", "rexruntime.dll", "rexgpu-xenos.dll", "dxcompiler.dll", "dxil.dll") {
+                "rexruntime.dll", "rexgpu-xenos.dll", "dxcompiler.dll", "dxil.dll") {
     Copy-Item (Join-Path $Build $f) $Dist
 }
 # plume\ holds the Vulkan/D3D backend data the native exes load next to them.
@@ -26,7 +27,15 @@ if (Test-Path (Join-Path $Build "plume")) { Copy-Item (Join-Path $Build "plume")
 
 # The launcher, when the user has built one (its folder belongs to the launcher work, not here).
 $Launcher = Join-Path $Root "WWE2K17 Launcher.exe"
-if (Test-Path $Launcher) { Copy-Item $Launcher $Dist }
+if (Test-Path $Launcher) {
+    # The launcher's updater compares its own version with the newest GitHub release: a launcher built for another
+    # VERSION would offer this very release again and again. tools\build-launcher.ps1 rebuilds it.
+    $lv = (Get-Item $Launcher).VersionInfo.ProductVersion -replace '\+.*$', ''
+    if ($lv -ne $Version) { throw "WWE2K17 Launcher.exe is version $lv, VERSION is ${Version}: run tools\build-launcher.ps1" }
+    Copy-Item $Launcher $Dist
+} else {
+    Write-Warning "No WWE2K17 Launcher.exe: run tools\build-launcher.ps1"
+}
 
 # Seed caches: the graphics pipelines and vertex declarations already met on this machine. Shipped
 # next to the exe, the game builds them in the background from the first start, so a player does not
@@ -47,7 +56,7 @@ if (Test-Path $DeclSeed) {
     Write-Warning "No declarations.bin: without it the seeded pipelines cannot be built at startup."
 }
 
-foreach ($f in "README.md", "LICENSE", "THIRD_PARTY.md") { Copy-Item (Join-Path $Root $f) $Dist }
+foreach ($f in "VERSION", "README.md", "LICENSE", "THIRD_PARTY.md") { Copy-Item (Join-Path $Root $f) $Dist }
 if (Test-Path (Join-Path $Root "third_party\licenses")) { New-Item -ItemType Directory -Force (Join-Path $Dist "third_party") | Out-Null; Copy-Item (Join-Path $Root "third_party\licenses") (Join-Path $Dist "third_party") -Recurse -Force }
 
 # A last check: nothing from the game must ever end up in the package.

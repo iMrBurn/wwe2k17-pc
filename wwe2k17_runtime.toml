@@ -1,4 +1,6 @@
-# Runtime settings, copied next to the exe as wwe2k17.toml by tools\build.ps1.
+# Runtime settings: copied next to the exe as wwe2k17.toml by tools\build.ps1, and built into the exes, which write
+# them as wwe2k17.toml at the first start when the file is missing (the release zip does not ship it). The F4 menu's
+# "Save to config" rewrites that file with every setting that differs from its default.
 
 # Load the Xenos GPU emulation plugin (rexgpu-xenos.dll). Without it the stock SDK runs with no GPU
 # at all: the kernel ignores the game's ring buffer setup and nothing is ever drawn.

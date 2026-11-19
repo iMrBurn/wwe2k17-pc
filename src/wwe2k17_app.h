@@ -3,6 +3,7 @@
 #pragma once
 
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <system_error>
@@ -26,6 +27,7 @@
 #include <rex/system/gpu_plugin.h>
 
 #include "script_input.h"
+#include "default_config.h"
 #include <rex/system/kernel_state.h>
 
 #if defined(_WIN32)
@@ -194,6 +196,17 @@ class Wwe2k17App : public rex::ReXApp {
  public:
   void OnConfigurePaths(rex::PathConfig& paths) override {
     user_data_root_ = paths.user_data_root;
+    WriteDefaultConfigIfMissing(paths.config_path);
+  }
+
+  // wwe2k17.toml is not in the release zip (an update would overwrite the player's settings and the key bindings the
+  // F4 menu saves there): the first start writes the defaults from wwe2k17_runtime.toml. Called before the SDK loads
+  // the file, and before logging starts, so a failure is silent: the game then runs on the built-in defaults.
+  static void WriteDefaultConfigIfMissing(const std::filesystem::path& path) {
+    std::error_code ec;
+    if (path.empty() || std::filesystem::exists(path, ec)) return;
+    std::ofstream out(path, std::ios::binary);
+    if (out) out << kWwe2k17DefaultConfig;
   }
 
   // The title opens its Xbox HDD cache (cache:\) at boot and waits on it. The stock SDK mounts no cache
